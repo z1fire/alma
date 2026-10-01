@@ -2,11 +2,10 @@ package com.z1fire.alma.data
 
 /** A starter course: tap it when creating a course to prefill a short "what to study" list. */
 data class Idea(val title: String, val subject: String, val colorIndex: Int, val items: List<Pair<String, String>>) {
-    fun toCourse(status: CourseStatus): Course = Course(
+    fun toCourse(): Course = Course(
         title = title,
         subject = subject,
         colorIndex = colorIndex,
-        status = status,
         items = items.map { (text, link) -> StudyItem(text = text, link = link) },
     )
 }

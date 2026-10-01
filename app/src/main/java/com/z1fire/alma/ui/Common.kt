@@ -17,11 +17,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
@@ -31,7 +28,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
-import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -69,10 +65,8 @@ fun rememberAppData(): AppData {
 // ---------- formatting ----------
 
 private val longDate = DateTimeFormatter.ofPattern("MMM d, yyyy")
-private val shortDate = DateTimeFormatter.ofPattern("EEE, MMM d")
 
 fun formatDate(epochDay: Long): String = LocalDate.ofEpochDay(epochDay).format(longDate)
-fun formatShortDate(epochDay: Long): String = LocalDate.ofEpochDay(epochDay).format(shortDate)
 
 fun formatTime(minuteOfDay: Int): String =
     LocalTime.of((minuteOfDay / 60) % 24, minuteOfDay % 60).format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT))
@@ -233,26 +227,6 @@ private fun ClickableField(label: String, value: String, icon: ImageVector, modi
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DateField(label: String, epochDay: Long, onChange: (Long) -> Unit, modifier: Modifier = Modifier) {
-    var show by remember { mutableStateOf(false) }
-    ClickableField(label, formatDate(epochDay), Icons.Filled.CalendarMonth, modifier, onClick = { show = true })
-    if (show) {
-        val state = rememberDatePickerState(initialSelectedDateMillis = epochDay * DAY_MS)
-        DatePickerDialog(
-            onDismissRequest = { show = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    state.selectedDateMillis?.let { onChange(it / DAY_MS) }
-                    show = false
-                }) { Text("OK") }
-            },
-            dismissButton = { TextButton(onClick = { show = false }) { Text("Cancel") } },
-        ) { DatePicker(state) }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
 fun TimeField(label: String, minuteOfDay: Int, onChange: (Int) -> Unit, modifier: Modifier = Modifier) {
     var show by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -276,5 +250,3 @@ fun TimeField(label: String, minuteOfDay: Int, onChange: (Int) -> Unit, modifier
         )
     }
 }
-
-const val DAY_MS = 86_400_000L

@@ -1,27 +1,23 @@
 # Alma — a simple study tracker
 
-An Android app for self-directed learning. Each "course" is just something you're learning — Mandarin, guitar,
-cell biology — with a checklist of what to study and a log of the time you put in. When you're done, mark it
-finished and get a certificate of completion.
+A small Android app for self-directed learning. Each course is something you're learning — Mandarin, guitar,
+cell biology — with a checklist of what to study and a running total of the time you've put in. When you're done,
+mark it finished.
 
 **Download:** grab `Alma.apk` from the [latest release](../../releases/latest) and install it on your phone
 (allow "install unknown apps" for your browser or file manager).
 
-## What it does
+## How it works
 
-- **Courses** with a name, optional subject, notes and color. Start from a starter idea (languages, biology,
-  logic, art, guitar, fitness, space, engineering, computer science) or type your own.
-- **What to study:** a checklist of books, chapters, topics or videos, with optional links. Check items off as you go.
-- **Track time:** a study timer (with a notification you can stop from) or log sessions after the fact.
-  See this week's hours against your goal and your daily streak.
-- **Studying / Up next / Finished:** keep what you're working on now separate from what's next. Finishing a
-  course asks what you learned and gives you a certificate with your total study time.
-- **Daily reminder** (optional): one evening nudge, only on days you haven't studied.
-- **Home-screen widget:** this week's study time and your current courses.
-- **Backups:** everything stays on the device; save and restore a JSON backup from Settings.
+- **One list.** What you're studying at the top; finished courses collect under **Done**.
+- **A course** has a name, an optional subject, notes and color, and a **What to study** checklist
+  (books, chapters, topics — with optional links). Start from a starter idea or type your own.
+- **Time:** tap **+15m / +30m / +1h** after a study session (with Undo). Tap the total to correct it.
+- **Finish** a course to note what you learned and get a certificate of completion.
+- From the **⋮** menu: an optional daily reminder (only on days you haven't studied), your name for certificates,
+  a home-screen widget, and backup / restore.
 
-Upgrading from 1.x converts your data automatically: syllabus units, readings and assignments become checklist
-items, and study sessions carry over.
+Upgrading from an older version converts your data automatically; a copy of the old file is kept on the device.
 
 ## Building
 

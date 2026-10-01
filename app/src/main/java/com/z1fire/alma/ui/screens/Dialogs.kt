@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -24,12 +25,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -46,16 +47,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.z1fire.alma.data.Course
-import com.z1fire.alma.data.CourseStatus
 import com.z1fire.alma.data.Idea
 import com.z1fire.alma.data.StudyItem
 import com.z1fire.alma.data.starterIdeas
 import com.z1fire.alma.ui.ColorDot
-import com.z1fire.alma.ui.DateField
+import com.z1fire.alma.ui.TimeField
 import com.z1fire.alma.ui.FormDialog
 import com.z1fire.alma.ui.formatDate
 import com.z1fire.alma.ui.formatHoursLong
-import com.z1fire.alma.ui.formatMinutes
 import com.z1fire.alma.ui.theme.DeptColors
 import com.z1fire.alma.ui.theme.Gold
 import java.time.LocalDate
@@ -69,7 +68,6 @@ fun CourseDialog(initial: Course?, onDismiss: () -> Unit, onSave: (Course) -> Un
     var subject by remember { mutableStateOf(initial?.subject ?: "") }
     var notes by remember { mutableStateOf(initial?.notes ?: "") }
     var color by remember { mutableIntStateOf(initial?.colorIndex ?: DeptColors.indices.random()) }
-    var startNow by remember { mutableStateOf(true) }
     var idea by remember { mutableStateOf<Idea?>(null) }
 
     FormDialog(
@@ -78,10 +76,7 @@ fun CourseDialog(initial: Course?, onDismiss: () -> Unit, onSave: (Course) -> Un
         saveEnabled = title.isNotBlank(),
         saveLabel = if (isNew) "Create" else "Save",
         onSave = {
-            val status = if (startNow) CourseStatus.ACTIVE else CourseStatus.SOMEDAY
-            val base = initial ?: (idea?.toCourse(status) ?: Course(title = "", status = status)).copy(
-                startedEpochDay = if (startNow) LocalDate.now().toEpochDay() else null,
-            )
+            val base = initial ?: idea?.toCourse() ?: Course(title = "")
             onSave(base.copy(title = title.trim(), subject = subject.trim(), notes = notes.trim(), colorIndex = color))
         },
     ) {
@@ -148,12 +143,6 @@ fun CourseDialog(initial: Course?, onDismiss: () -> Unit, onSave: (Course) -> Un
                 ) { ColorDot(c, 26) }
             }
         }
-        if (isNew) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(selected = startNow, onClick = { startNow = true }, label = { Text("Start now") })
-                FilterChip(selected = !startNow, onClick = { startNow = false }, label = { Text("Save for later") })
-            }
-        }
     }
 }
 
@@ -179,42 +168,70 @@ fun ItemDialog(initial: StudyItem, onDismiss: () -> Unit, onSave: (StudyItem) ->
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+/** Correct a course's total study time. */
 @Composable
-fun LogTimeDialog(
-    title: String = "Log study time",
-    initialMinutes: Int = 30,
-    showDate: Boolean = true,
-    onDismiss: () -> Unit,
-    onSave: (epochDay: Long, minutes: Int, notes: String) -> Unit,
-) {
-    var day by remember { mutableLongStateOf(LocalDate.now().toEpochDay()) }
-    var minutesText by remember { mutableStateOf(initialMinutes.toString()) }
-    var notes by remember { mutableStateOf("") }
-    val minutes = minutesText.toIntOrNull() ?: 0
-    FormDialog(title, onDismiss, onSave = { onSave(day, minutes, notes.trim()) }, saveEnabled = minutes > 0) {
-        if (showDate) DateField("Date", day, { day = it })
-        OutlinedTextField(
-            value = minutesText,
-            onValueChange = { minutesText = it.filter(Char::isDigit).take(4) },
-            label = { Text("Minutes") },
-            supportingText = { if (minutes > 0) Text(formatMinutes(minutes)) },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf(15, 30, 45, 60, 90, 120).forEach { m ->
-                FilterChip(selected = minutes == m, onClick = { minutesText = m.toString() }, label = { Text(formatMinutes(m)) })
-            }
+fun TotalTimeDialog(minutes: Int, onDismiss: () -> Unit, onSave: (Int) -> Unit) {
+    var hours by remember { mutableStateOf((minutes / 60).toString()) }
+    var mins by remember { mutableStateOf((minutes % 60).toString()) }
+    val total = (hours.toIntOrNull() ?: 0) * 60 + (mins.toIntOrNull() ?: 0)
+    FormDialog("Total time studied", onDismiss, onSave = { onSave(total) }) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedTextField(
+                hours, { hours = it.filter(Char::isDigit).take(4) },
+                label = { Text("Hours") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.weight(1f),
+            )
+            OutlinedTextField(
+                mins, { mins = it.filter(Char::isDigit).take(2) },
+                label = { Text("Minutes") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.weight(1f),
+            )
         }
+    }
+}
+
+@Composable
+fun NameDialog(name: String, onDismiss: () -> Unit, onSave: (String) -> Unit) {
+    var text by remember { mutableStateOf(name) }
+    FormDialog("Name on certificates", onDismiss, onSave = { onSave(text.trim()) }) {
         OutlinedTextField(
-            value = notes,
-            onValueChange = { notes = it },
-            label = { Text("What did you cover? (optional)") },
-            minLines = 2,
+            text, { text = it },
+            label = { Text("Your name") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
             modifier = Modifier.fillMaxWidth(),
         )
+    }
+}
+
+/** Turn the daily reminder on/off and pick its time. Permission is handled by the caller. */
+@Composable
+fun ReminderDialog(
+    enabled: Boolean,
+    minute: Int,
+    onDismiss: () -> Unit,
+    onSave: (enabled: Boolean, minute: Int) -> Unit,
+    onTest: () -> Unit,
+) {
+    var on by remember { mutableStateOf(enabled) }
+    var at by remember { mutableIntStateOf(minute) }
+    FormDialog("Daily reminder", onDismiss, onSave = { onSave(on, at) }) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Remind me on days I haven't studied",
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.weight(1f),
+            )
+            Switch(checked = on, onCheckedChange = { on = it })
+        }
+        if (on) {
+            TimeField("Time", at, { at = it })
+            TextButton(onClick = onTest) { Text("Send a test notification") }
+        }
     }
 }
 
@@ -228,7 +245,7 @@ fun FinishDialog(course: Course, onDismiss: () -> Unit, onFinish: (reflection: S
         saveLabel = "Mark finished",
     ) {
         val stats = listOfNotNull(
-            course.totalMinutes.takeIf { it > 0 }?.let { "${formatHoursLong(it)} of study" },
+            course.minutes.takeIf { it > 0 }?.let { "${formatHoursLong(it)} of study" },
             course.items.takeIf { it.isNotEmpty() }?.let { "${course.doneCount} of ${it.size} items done" },
         )
         if (stats.isNotEmpty()) Text(stats.joinToString(" · "), style = MaterialTheme.typography.bodyMedium)
@@ -279,7 +296,7 @@ fun CertificateDialog(name: String, course: Course, onDismiss: () -> Unit) {
                     Text(course.title, style = MaterialTheme.typography.headlineMedium, color = navy, textAlign = TextAlign.Center)
                     Spacer(Modifier.height(12.dp))
                     val stats = listOfNotNull(
-                        course.totalMinutes.takeIf { it > 0 }?.let { formatHoursLong(it) + " of study" },
+                        course.minutes.takeIf { it > 0 }?.let { formatHoursLong(it) + " of study" },
                         course.doneCount.takeIf { it > 0 }?.let { "$it item${if (it == 1) "" else "s"} completed" },
                     )
                     if (stats.isNotEmpty()) {
@@ -292,7 +309,7 @@ fun CertificateDialog(name: String, course: Course, onDismiss: () -> Unit) {
                     ) { Icon(Icons.Filled.School, null, tint = Gold, modifier = Modifier.size(32.dp)) }
                     Spacer(Modifier.height(14.dp))
                     Text(
-                        formatDate(course.finishedEpochDay ?: LocalDate.now().toEpochDay()),
+                        formatDate(course.finishedEpochDay?.takeIf { it > 0 } ?: LocalDate.now().toEpochDay()),
                         style = MaterialTheme.typography.bodyMedium,
                         fontFamily = FontFamily.Serif,
                         color = ink,

@@ -11,59 +11,38 @@ import java.time.ZonedDateTime
 
 /** Keeps one alarm armed: the next daily study reminder. */
 object ReminderScheduler {
-    const val CHANNEL_REMINDER = "study_reminder"
-    const val CHANNEL_SESSION = "study_session"
-
+    const val CHANNEL = "study_reminder"
     const val ACTION_REMINDER = "com.z1fire.alma.action.REMINDER"
-    const val ACTION_END_SESSION = "com.z1fire.alma.action.END_SESSION"
-    const val ACTION_DISCARD_SESSION = "com.z1fire.alma.action.DISCARD_SESSION"
 
-    /** Channels and alarm actions used by v1, removed on upgrade. */
-    private val OLD_CHANNELS = listOf("class_reminders", "daily_digest", "weekly_report")
-    private val OLD_ACTIONS = listOf(
-        null to 0,
-        "com.z1fire.alma.action.CLASS" to 0,
-        "com.z1fire.alma.action.BRIEFING" to 1,
-        "com.z1fire.alma.action.NUDGE" to 2,
-        "com.z1fire.alma.action.WEEKLY" to 3,
-    )
+    /** Channels from older versions, removed on upgrade. */
+    private val OLD_CHANNELS = listOf("class_reminders", "daily_digest", "weekly_report", "study_session")
 
     /** The shortest window Android 12+ honors; plain inexact alarms can drift by an hour. */
     private const val WINDOW_MS = 10 * 60_000L
 
-    fun createChannels(context: Context) {
+    fun createChannel(context: Context) {
         val nm = context.getSystemService(NotificationManager::class.java)
         OLD_CHANNELS.forEach { nm.deleteNotificationChannel(it) }
-        nm.createNotificationChannels(
-            listOf(
-                NotificationChannel(CHANNEL_REMINDER, "Daily study reminder", NotificationManager.IMPORTANCE_DEFAULT)
-                    .apply { description = "A nudge on days you haven't studied yet" },
-                NotificationChannel(CHANNEL_SESSION, "Study timer", NotificationManager.IMPORTANCE_LOW)
-                    .apply { description = "Shows the running timer during a study session" },
-            ),
+        nm.createNotificationChannel(
+            NotificationChannel(CHANNEL, "Daily study reminder", NotificationManager.IMPORTANCE_DEFAULT)
+                .apply { description = "A nudge on days you haven't studied yet" },
         )
-    }
-
-    /** Next occurrence of a time of day, strictly in the future. */
-    fun nextAt(minuteOfDay: Int, now: ZonedDateTime = ZonedDateTime.now()): ZonedDateTime {
-        val today = now.toLocalDate().atStartOfDay(now.zone).plusMinutes(minuteOfDay.toLong())
-        return if (today.isAfter(now.plusSeconds(15))) today else today.plusDays(1)
     }
 
     fun reschedule(context: Context, data: AppData) {
         val am = context.getSystemService(AlarmManager::class.java)
-        OLD_ACTIONS.forEach { (action, code) -> am.cancel(pending(context, action, code)) }
-        val pi = pending(context, ACTION_REMINDER, 0)
+        val pi = PendingIntent.getBroadcast(
+            context, 0,
+            Intent(context, ReminderReceiver::class.java).setAction(ACTION_REMINDER),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
         if (!data.profile.reminderEnabled) {
             am.cancel(pi)
             return
         }
-        val at = nextAt(data.profile.reminderMinute).toInstant().toEpochMilli()
-        am.setWindow(AlarmManager.RTC_WAKEUP, at, WINDOW_MS, pi)
-    }
-
-    private fun pending(context: Context, action: String?, code: Int): PendingIntent {
-        val intent = Intent(context, ReminderReceiver::class.java).also { if (action != null) it.action = action }
-        return PendingIntent.getBroadcast(context, code, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val now = ZonedDateTime.now()
+        var at = now.toLocalDate().atStartOfDay(now.zone).plusMinutes(data.profile.reminderMinute.toLong())
+        if (!at.isAfter(now.plusSeconds(15))) at = at.plusDays(1)
+        am.setWindow(AlarmManager.RTC_WAKEUP, at.toInstant().toEpochMilli(), WINDOW_MS, pi)
     }
 }

@@ -3,8 +3,6 @@ package com.z1fire.alma
 import android.app.Application
 import androidx.glance.appwidget.updateAll
 import com.z1fire.alma.data.Repository
-import com.z1fire.alma.data.course
-import com.z1fire.alma.reminders.Notifier
 import com.z1fire.alma.reminders.ReminderScheduler
 import com.z1fire.alma.widget.TodayWidget
 import kotlinx.coroutines.CoroutineScope
@@ -24,28 +22,20 @@ class AlmaApp : Application() {
     override fun onCreate() {
         super.onCreate()
         repository = Repository(File(filesDir, "curriculum.json"))
-        ReminderScheduler.createChannels(this)
+        ReminderScheduler.createChannel(this)
 
         // Re-arm the daily reminder when its settings change.
         appScope.launch {
             repository.state
-                .map { Pair(it.profile.reminderEnabled, it.profile.reminderMinute) }
+                .map { it.profile.reminderEnabled to it.profile.reminderMinute }
                 .distinctUntilChanged()
                 .collect { ReminderScheduler.reschedule(this@AlmaApp, repository.current) }
         }
 
-        // Show or clear the ongoing timer notification as study sessions start and stop.
+        // Keep the home-screen widget in step with the course list.
         appScope.launch {
             repository.state
-                .map { d -> Triple(d.activeTimer, d.profile.sessionNotificationEnabled, d.activeTimer?.let { d.course(it.courseId)?.title }) }
-                .distinctUntilChanged()
-                .collect { Notifier.syncSession(this@AlmaApp, repository.current) }
-        }
-
-        // Keep the home-screen widget in step with courses and logged time.
-        appScope.launch {
-            repository.state
-                .map { Pair(it.courses, it.profile.weeklyGoalMinutes) }
+                .map { it.courses }
                 .distinctUntilChanged()
                 .collect { TodayWidget().updateAll(this@AlmaApp) }
         }

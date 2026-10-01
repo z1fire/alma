@@ -3,73 +3,119 @@ package com.z1fire.alma.data
 import kotlinx.serialization.Serializable
 
 /*
- * Version 1 stored a full college model (departments, credits, terms, meetings, assignments…).
- * These classes read just enough of that format to carry the student's work into the simple model:
- * syllabus units, readings and assignments become checklist items; study sessions carry over as-is.
- * Enum-typed fields are read as strings so old files decode no matter what changed.
+ * Readers for older save formats, so upgrading never loses work.
+ *   v1: the full "college" model (departments, units, readings, assignments, dated sessions).
+ *   v2: courses with a checklist, a status, and dated study sessions.
+ * Both become v3: checklist items carry over, and dated sessions collapse into a total and a last-studied day.
+ * Enum-typed fields are read as strings so old files decode no matter what changed since.
  */
 
 @Serializable
-internal data class LegacyAppData(
-    val profile: LegacyProfile = LegacyProfile(),
-    val departments: List<LegacyDepartment> = emptyList(),
-    val courses: List<LegacyCourse> = emptyList(),
-    val activeTimer: ActiveTimer? = null,
+internal data class OldSession(val epochDay: Long = 0, val minutes: Int = 0)
+
+private fun List<OldSession>.total() = sumOf { it.minutes }
+private fun List<OldSession>.lastDay() = filter { it.minutes > 0 }.maxOfOrNull { it.epochDay }
+
+// ---------------- v2 ----------------
+
+@Serializable
+internal data class V2AppData(
+    val profile: V2Profile = V2Profile(),
+    val courses: List<V2Course> = emptyList(),
 )
 
 @Serializable
-internal data class LegacyProfile(
+internal data class V2Profile(
+    val name: String = "",
+    val reminderEnabled: Boolean = false,
+    val reminderMinute: Int = 19 * 60,
+)
+
+@Serializable
+internal data class V2Course(
+    val id: String,
+    val title: String = "",
+    val subject: String = "",
+    val notes: String = "",
+    val colorIndex: Int = 0,
+    val status: String = "ACTIVE",
+    val items: List<StudyItem> = emptyList(),
+    val sessions: List<OldSession> = emptyList(),
+    val finishedEpochDay: Long? = null,
+    val reflection: String = "",
+    val createdAtMillis: Long = System.currentTimeMillis(),
+)
+
+internal fun V2AppData.toCurrent() = AppData(
+    profile = Profile(profile.name, profile.reminderEnabled, profile.reminderMinute),
+    courses = courses.map { c ->
+        Course(
+            id = c.id,
+            title = c.title.ifBlank { "Untitled course" },
+            subject = c.subject,
+            notes = c.notes,
+            colorIndex = c.colorIndex,
+            items = c.items,
+            minutes = c.sessions.total(),
+            lastStudiedEpochDay = c.sessions.lastDay(),
+            finishedEpochDay = if (c.status == "FINISHED") c.finishedEpochDay ?: c.sessions.lastDay() ?: 0 else null,
+            reflection = c.reflection,
+            createdAtMillis = c.createdAtMillis,
+        )
+    },
+)
+
+// ---------------- v1 ----------------
+
+@Serializable
+internal data class V1AppData(
+    val profile: V1Profile = V1Profile(),
+    val departments: List<V1Department> = emptyList(),
+    val courses: List<V1Course> = emptyList(),
+)
+
+@Serializable
+internal data class V1Profile(
     val studentName: String = "",
-    val weeklyGoalMinutes: Int = 300,
     val nudgeEnabled: Boolean = false,
     val nudgeMinute: Int = 19 * 60,
-    val sessionNotificationEnabled: Boolean = true,
-    val notificationsPrompted: Boolean = false,
 )
 
 @Serializable
-internal data class LegacyDepartment(val id: String, val name: String = "", val colorIndex: Int = 0)
+internal data class V1Department(val id: String, val name: String = "", val colorIndex: Int = 0)
 
 @Serializable
-internal data class LegacyCourse(
+internal data class V1Course(
     val id: String,
     val departmentId: String? = null,
     val title: String = "",
     val description: String = "",
     val objectives: List<String> = emptyList(),
     val status: String = "PLANNED",
-    val startEpochDay: Long? = null,
-    val modules: List<LegacyNamedItem> = emptyList(),
-    val resources: List<LegacyResource> = emptyList(),
-    val assignments: List<LegacyNamedItem> = emptyList(),
-    val sessions: List<StudySession> = emptyList(),
+    val modules: List<V1Named> = emptyList(),
+    val resources: List<V1Resource> = emptyList(),
+    val assignments: List<V1Named> = emptyList(),
+    val sessions: List<OldSession> = emptyList(),
     val reflection: String = "",
     val completedEpochDay: Long? = null,
     val createdAtMillis: Long = System.currentTimeMillis(),
 )
 
 @Serializable
-internal data class LegacyNamedItem(val title: String = "", val done: Boolean = false)
+internal data class V1Named(val title: String = "", val done: Boolean = false)
 
 @Serializable
-internal data class LegacyResource(
+internal data class V1Resource(
     val title: String = "",
     val author: String = "",
     val url: String = "",
     val status: String = "NOT_STARTED",
 )
 
-internal fun LegacyAppData.toCurrent(): AppData {
+internal fun V1AppData.toCurrent(): AppData {
     val depts = departments.associateBy { it.id }
     return AppData(
-        profile = Profile(
-            name = profile.studentName,
-            weeklyGoalMinutes = profile.weeklyGoalMinutes,
-            reminderEnabled = profile.nudgeEnabled,
-            reminderMinute = profile.nudgeMinute,
-            sessionNotificationEnabled = profile.sessionNotificationEnabled,
-            reminderPrompted = profile.notificationsPrompted,
-        ),
+        profile = Profile(profile.studentName, profile.nudgeEnabled, profile.nudgeMinute),
         courses = courses.map { c ->
             val dept = c.departmentId?.let { depts[it] }
             val goals = if (c.objectives.isEmpty()) "" else "Goals:\n" + c.objectives.joinToString("\n") { "• $it" }
@@ -79,11 +125,6 @@ internal fun LegacyAppData.toCurrent(): AppData {
                 subject = dept?.name.orEmpty(),
                 notes = listOf(c.description, goals).filter { it.isNotBlank() }.joinToString("\n\n"),
                 colorIndex = dept?.colorIndex ?: 0,
-                status = when (c.status) {
-                    "ENROLLED" -> CourseStatus.ACTIVE
-                    "COMPLETED" -> CourseStatus.FINISHED
-                    else -> CourseStatus.SOMEDAY
-                },
                 items = c.modules.map { StudyItem(text = it.title, done = it.done) } +
                     c.resources.map { r ->
                         StudyItem(
@@ -93,13 +134,12 @@ internal fun LegacyAppData.toCurrent(): AppData {
                         )
                     } +
                     c.assignments.map { StudyItem(text = it.title, done = it.done) },
-                sessions = c.sessions,
-                startedEpochDay = c.startEpochDay,
-                finishedEpochDay = c.completedEpochDay,
+                minutes = c.sessions.total(),
+                lastStudiedEpochDay = c.sessions.lastDay(),
+                finishedEpochDay = if (c.status == "COMPLETED") c.completedEpochDay ?: 0 else null,
                 reflection = c.reflection,
                 createdAtMillis = c.createdAtMillis,
             )
         },
-        activeTimer = activeTimer,
     )
 }

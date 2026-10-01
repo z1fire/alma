@@ -1,5 +1,5 @@
 <resources>
     <string name="app_name">Alma</string>
-    <string name="widget_label">Study this week</string>
-    <string name="widget_description">Study time this week and the courses you\'re working on</string>
+    <string name="widget_label">Studying</string>
+    <string name="widget_description">What you\'re studying, with time and progress</string>
 </resources>
