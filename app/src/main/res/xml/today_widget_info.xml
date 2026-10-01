@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- updatePeriodMillis (30 min, the platform minimum) rolls the widget over to the new day
+     and dims finished classes; data changes push updates immediately from AlmaApp. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/widget_description"
+    android:initialLayout="@layout/glance_default_loading_layout"
+    android:minWidth="180dp"
+    android:minHeight="110dp"
+    android:minResizeWidth="140dp"
+    android:minResizeHeight="70dp"
+    android:targetCellWidth="3"
+    android:targetCellHeight="2"
+    android:resizeMode="horizontal|vertical"
+    android:updatePeriodMillis="1800000"
+    android:previewImage="@mipmap/ic_launcher"
+    android:widgetCategory="home_screen" />

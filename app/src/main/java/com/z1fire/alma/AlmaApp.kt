@@ -1,9 +1,11 @@
 package com.z1fire.alma
 
 import android.app.Application
+import androidx.glance.appwidget.updateAll
 import com.z1fire.alma.data.CourseStatus
 import com.z1fire.alma.data.Repository
 import com.z1fire.alma.reminders.ReminderScheduler
+import com.z1fire.alma.widget.TodayWidget
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -36,6 +38,14 @@ class AlmaApp : Application() {
                 }
                 .distinctUntilChanged()
                 .collect { ReminderScheduler.reschedule(this@AlmaApp, repository.current) }
+        }
+
+        // Keep the home-screen widget in step with courses, schedules and assignments.
+        appScope.launch {
+            repository.state
+                .map { Pair(it.courses, it.departments) }
+                .distinctUntilChanged()
+                .collect { TodayWidget().updateAll(this@AlmaApp) }
         }
     }
 }

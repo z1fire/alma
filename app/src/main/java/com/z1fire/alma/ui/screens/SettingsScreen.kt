@@ -1,6 +1,8 @@
 package com.z1fire.alma.ui.screens
 
 import android.Manifest
+import android.appwidget.AppWidgetManager
+import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -60,6 +62,7 @@ import com.z1fire.alma.ui.SectionTitle
 import com.z1fire.alma.ui.formatMinutes
 import com.z1fire.alma.ui.rememberAppData
 import com.z1fire.alma.ui.theme.deptColor
+import com.z1fire.alma.widget.TodayWidgetReceiver
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -187,6 +190,20 @@ fun SettingsScreen(onBack: () -> Unit) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+            }
+
+            val widgets = context.getSystemService(AppWidgetManager::class.java)
+            if (widgets.isRequestPinAppWidgetSupported) {
+                Spacer(Modifier.height(4.dp))
+                SectionTitle("Home screen widget")
+                Text(
+                    "Show today's classes on your home screen — tap a class to jump into its course.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedButton(onClick = {
+                    widgets.requestPinAppWidget(ComponentName(context, TodayWidgetReceiver::class.java), null, null)
+                }) { Text("Add \"Today's classes\" widget") }
             }
 
             Spacer(Modifier.height(4.dp))

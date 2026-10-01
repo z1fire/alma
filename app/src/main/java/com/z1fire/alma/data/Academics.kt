@@ -2,6 +2,7 @@ package com.z1fire.alma.data
 
 import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.util.Locale
 
 object Grades {
@@ -122,6 +123,19 @@ fun AppData.meetingsOn(date: LocalDate): List<Pair<Course, Meeting>> =
     courses.filter { it.isActiveOn(date) }
         .flatMap { c -> c.meetings.filter { it.dayOfWeek == date.dayOfWeek.value }.map { c to it } }
         .sortedBy { it.second.startMinute }
+
+data class UpcomingMeeting(val date: LocalDate, val course: Course, val meeting: Meeting)
+
+/** The first class meeting starting after [now], looking up to [days] ahead. */
+fun AppData.nextMeetingAfter(now: LocalDateTime, days: Int = 14): UpcomingMeeting? {
+    for (offset in 0..days) {
+        val date = now.toLocalDate().plusDays(offset.toLong())
+        val nowMinute = if (offset == 0) now.hour * 60 + now.minute else -1
+        meetingsOn(date).firstOrNull { it.second.startMinute > nowMinute }
+            ?.let { (c, m) -> return UpcomingMeeting(date, c, m) }
+    }
+    return null
+}
 
 fun AppData.assignmentsDueOn(date: LocalDate): List<Pair<Course, Assignment>> =
     courses.filter { it.status != CourseStatus.DROPPED }
