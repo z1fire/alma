@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Mortarboard over an open book, drawn inside the 66dp adaptive-icon safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- open book -->
+    <path
+        android:fillColor="#F4E9CC"
+        android:pathData="M27,66 C36,62 46,63 53,68 L53,80 C46,75 36,74 27,78 Z" />
+    <path
+        android:fillColor="#E8D9B0"
+        android:pathData="M81,66 C72,62 62,63 55,68 L55,80 C62,75 72,74 81,78 Z" />
+    <!-- cap body -->
+    <path
+        android:fillColor="#F4E9CC"
+        android:pathData="M37,48 L37,58 C37,65 71,65 71,58 L71,48 L54,55 Z" />
+    <!-- cap board -->
+    <path
+        android:fillColor="#E3C565"
+        android:pathData="M54,28 L84,41 L54,54 L24,41 Z" />
+    <!-- tassel cord -->
+    <path
+        android:strokeColor="#E3C565"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="M54,41 L79,44 L79,58" />
+    <!-- tassel -->
+    <path
+        android:fillColor="#E3C565"
+        android:pathData="M76.5,57 L81.5,57 L82.5,65 L75.5,65 Z" />
+    <!-- button -->
+    <path
+        android:fillColor="#1F3A5F"
+        android:pathData="M52,41 A2,2 0 1,0 56,41 A2,2 0 1,0 52,41 Z" />
+</vector>
