@@ -15,6 +15,7 @@ import androidx.glance.action.Action
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
+import androidx.glance.appwidget.LinearProgressIndicator
 import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.cornerRadius
@@ -40,27 +41,25 @@ import com.z1fire.alma.AlmaApp
 import com.z1fire.alma.MainActivity
 import com.z1fire.alma.data.AppData
 import com.z1fire.alma.data.Course
-import com.z1fire.alma.data.Meeting
-import com.z1fire.alma.data.assignmentsDueOn
-import com.z1fire.alma.data.codeOf
-import com.z1fire.alma.data.department
-import com.z1fire.alma.data.meetingsOn
-import com.z1fire.alma.data.nextMeetingAfter
-import com.z1fire.alma.ui.dayName
-import com.z1fire.alma.ui.formatMonthDay
-import com.z1fire.alma.ui.formatTime
-import com.z1fire.alma.ui.formatTimeRange
+import com.z1fire.alma.data.active
+import com.z1fire.alma.data.streak
+import com.z1fire.alma.data.weekMinutes
+import com.z1fire.alma.ui.formatMinutes
 import com.z1fire.alma.ui.theme.deptColor
-import java.time.LocalDateTime
+import java.time.LocalDate
 
-// Same collegiate palette as the app, in day/night pairs.
+// Same palette as the app, in day/night pairs.
 private val Bg = ColorProvider(day = Color(0xFFFBF8F1), night = Color(0xFF1E2229))
 private val Ink = ColorProvider(day = Color(0xFF1C1B17), night = Color(0xFFE6E2D9))
 private val Muted = ColorProvider(day = Color(0xFF6B6455), night = Color(0xFF9EA2AA))
 private val Accent = ColorProvider(day = Color(0xFF7A2232), night = Color(0xFFF0B3BC))
-private val Now = ColorProvider(day = Color(0xFF1F3A5F), night = Color(0xFFA9C7F0))
+private val Bar = ColorProvider(day = Color(0xFF1F3A5F), night = Color(0xFFA9C7F0))
+private val Track = ColorProvider(day = Color(0x221F3A5F), night = Color(0x33A9C7F0))
 
-/** Home-screen widget listing today's class meetings, or the next one when today is free. */
+/**
+ * Home-screen widget: study time this week against the goal, and the courses you're studying.
+ * (Class name kept from v1 so widgets already on the home screen keep working.)
+ */
 class TodayWidget : GlanceAppWidget() {
     override val sizeMode = SizeMode.Exact
 
@@ -68,7 +67,7 @@ class TodayWidget : GlanceAppWidget() {
         val repo = (context.applicationContext as AlmaApp).repository
         provideContent {
             val data by repo.state.collectAsState()
-            Content(context, data, LocalDateTime.now())
+            Content(context, data, LocalDate.now())
         }
     }
 }
@@ -88,11 +87,10 @@ private fun openApp(context: Context, courseId: String? = null): Action {
 }
 
 @Composable
-private fun Content(context: Context, data: AppData, now: LocalDateTime) {
-    val today = now.toLocalDate()
-    val nowMinute = now.hour * 60 + now.minute
-    val meetings = data.meetingsOn(today)
-    val dueToday = data.assignmentsDueOn(today).count { !it.second.done }
+private fun Content(context: Context, data: AppData, today: LocalDate) {
+    val minutes = data.weekMinutes(today)
+    val goal = data.profile.weeklyGoalMinutes.coerceAtLeast(1)
+    val streak = data.streak(today)
 
     Column(
         GlanceModifier
@@ -103,73 +101,51 @@ private fun Content(context: Context, data: AppData, now: LocalDateTime) {
             .clickable(openApp(context)),
     ) {
         Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("TODAY", style = TextStyle(color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold))
+            Text("THIS WEEK", style = TextStyle(color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold))
             Spacer(GlanceModifier.width(6.dp))
             Text(
-                "${dayName(today.dayOfWeek.value)}, ${formatMonthDay(today)}",
-                style = TextStyle(color = Muted, fontSize = 12.sp),
+                "${formatMinutes(minutes)} of ${formatMinutes(goal)}",
+                style = TextStyle(color = Ink, fontSize = 12.sp, fontWeight = FontWeight.Bold),
                 modifier = GlanceModifier.defaultWeight(),
             )
-            if (dueToday > 0) {
-                Text("$dueToday due", style = TextStyle(color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold))
-            }
+            if (streak > 0) Text("$streak-day streak", style = TextStyle(color = Accent, fontSize = 11.sp))
         }
+        Spacer(GlanceModifier.height(4.dp))
+        LinearProgressIndicator(
+            progress = (minutes.toFloat() / goal).coerceIn(0f, 1f),
+            modifier = GlanceModifier.fillMaxWidth().height(6.dp),
+            color = Bar,
+            backgroundColor = Track,
+        )
         Spacer(GlanceModifier.height(6.dp))
 
-        if (meetings.isEmpty()) {
-            Text("No classes today", style = TextStyle(color = Ink, fontSize = 15.sp, fontWeight = FontWeight.Bold))
-            val next = data.nextMeetingAfter(now)
-            Text(
-                if (next == null) "Nothing on the timetable — enroll in a course to fill it." else
-                    "Next: ${dayName(next.date.dayOfWeek.value)} ${formatTime(next.meeting.startMinute)} · " +
-                        "${data.codeOf(next.course)} ${next.meeting.label}",
-                style = TextStyle(color = Muted, fontSize = 12.sp),
-                maxLines = 2,
-                modifier = if (next == null) GlanceModifier else GlanceModifier.clickable(openApp(context, next.course.id)),
-            )
+        val courses = data.active
+        if (courses.isEmpty()) {
+            Text("Nothing in progress", style = TextStyle(color = Ink, fontSize = 14.sp, fontWeight = FontWeight.Bold))
+            Text("Open Alma to start a course.", style = TextStyle(color = Muted, fontSize = 12.sp))
         } else {
             LazyColumn(GlanceModifier.fillMaxWidth().defaultWeight()) {
-                items(meetings, itemId = { it.second.id.hashCode().toLong() }) { (course, meeting) ->
-                    MeetingRow(context, data, course, meeting, nowMinute)
-                }
+                items(courses, itemId = { it.id.hashCode().toLong() }) { course -> CourseRow(context, course, today) }
             }
         }
     }
 }
 
 @Composable
-private fun MeetingRow(context: Context, data: AppData, course: Course, meeting: Meeting, nowMinute: Int) {
-    val end = meeting.startMinute + meeting.durationMinutes
-    val over = nowMinute >= end
-    val live = nowMinute in meeting.startMinute until end
-    val bar = deptColor(data.department(course.departmentId)?.colorIndex)
+private fun CourseRow(context: Context, course: Course, today: LocalDate) {
     Row(
         GlanceModifier.fillMaxWidth().padding(vertical = 4.dp).clickable(openApp(context, course.id)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            GlanceModifier
-                .width(4.dp)
-                .height(38.dp)
-                .cornerRadius(2.dp)
-                .background(if (over) bar.copy(alpha = 0.35f) else bar),
-        ) {}
+        Box(GlanceModifier.width(4.dp).height(32.dp).cornerRadius(2.dp).background(deptColor(course.colorIndex))) {}
         Spacer(GlanceModifier.width(8.dp))
         Column(GlanceModifier.defaultWeight()) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(formatTimeRange(meeting.startMinute, meeting.durationMinutes), style = TextStyle(color = Muted, fontSize = 11.sp))
-                if (live) {
-                    Spacer(GlanceModifier.width(6.dp))
-                    Text("NOW", style = TextStyle(color = Now, fontSize = 11.sp, fontWeight = FontWeight.Bold))
-                }
-            }
-            Text(
-                "${data.codeOf(course)} · ${meeting.label}",
-                style = TextStyle(color = if (over) Muted else Ink, fontSize = 14.sp, fontWeight = FontWeight.Bold),
-                maxLines = 1,
+            Text(course.title, style = TextStyle(color = Ink, fontSize = 14.sp, fontWeight = FontWeight.Bold), maxLines = 1)
+            val parts = listOfNotNull(
+                course.weekMinutes(today).takeIf { it > 0 }?.let { "${formatMinutes(it)} this week" },
+                course.items.takeIf { it.isNotEmpty() }?.let { "${course.doneCount}/${it.size} done" },
             )
-            val sub = listOf(course.title, meeting.location).filter { it.isNotBlank() }.joinToString(" · ")
-            Text(sub, style = TextStyle(color = Muted, fontSize = 11.sp), maxLines = 1)
+            Text(parts.ifEmpty { listOf("Not started this week") }.joinToString(" · "), style = TextStyle(color = Muted, fontSize = 11.sp), maxLines = 1)
         }
     }
 }

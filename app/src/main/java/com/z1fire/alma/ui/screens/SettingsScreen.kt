@@ -2,32 +2,22 @@ package com.z1fire.alma.ui.screens
 
 import android.appwidget.AppWidgetManager
 import android.content.ComponentName
-import android.content.Intent
-import android.net.Uri
-import android.os.Build
-import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -39,7 +29,6 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -50,12 +39,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
-import com.z1fire.alma.data.Department
 import com.z1fire.alma.data.Profile
 import com.z1fire.alma.reminders.Notifier
-import com.z1fire.alma.reminders.ReminderScheduler
-import com.z1fire.alma.ui.ColorDot
 import com.z1fire.alma.ui.ConfirmDialog
 import com.z1fire.alma.ui.LocalRepository
 import com.z1fire.alma.ui.SectionTitle
@@ -63,7 +50,6 @@ import com.z1fire.alma.ui.TimeField
 import com.z1fire.alma.ui.formatMinutes
 import com.z1fire.alma.ui.rememberAppData
 import com.z1fire.alma.ui.rememberNotificationGate
-import com.z1fire.alma.ui.theme.deptColor
 import com.z1fire.alma.widget.TodayWidgetReceiver
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -71,7 +57,7 @@ import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import kotlin.math.roundToInt
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(onBack: () -> Unit) {
     val repo = LocalRepository.current
@@ -80,15 +66,11 @@ fun SettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
-    var editDept by remember { mutableStateOf<Department?>(null) }
-    var addingDept by remember { mutableStateOf(false) }
-    var deletingDept by remember { mutableStateOf<Department?>(null) }
     var confirmImport by remember { mutableStateOf(false) }
 
     val withNotifications = rememberNotificationGate(onDenied = {
         scope.launch { snackbar.showSnackbar("Notifications are blocked — allow them for Alma in system settings.") }
     })
-    /** Switch handler: turning on asks for permission first; turning off is immediate. */
     fun toggle(on: Boolean, set: (Profile, Boolean) -> Profile) {
         if (on) withNotifications { repo.updateProfile { set(it, true) } } else repo.updateProfile { set(it, false) }
     }
@@ -96,11 +78,9 @@ fun SettingsScreen(onBack: () -> Unit) {
     val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri != null) scope.launch {
             val ok = withContext(Dispatchers.IO) {
-                runCatching {
-                    context.contentResolver.openOutputStream(uri)?.use { it.write(repo.exportJson().toByteArray()) }
-                }.isSuccess
+                runCatching { context.contentResolver.openOutputStream(uri)?.use { it.write(repo.exportJson().toByteArray()) } }.isSuccess
             }
-            snackbar.showSnackbar(if (ok) "Records exported." else "Export failed.")
+            snackbar.showSnackbar(if (ok) "Backup saved." else "Export failed.")
         }
     }
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -109,7 +89,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                 runCatching { context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() } }.getOrNull()
             }
             val ok = text != null && repo.importJson(text)
-            snackbar.showSnackbar(if (ok) "Records restored." else "That file isn't an Alma backup.")
+            snackbar.showSnackbar(if (ok) "Backup restored." else "That file isn't an Alma backup.")
         }
     }
 
@@ -117,7 +97,7 @@ fun SettingsScreen(onBack: () -> Unit) {
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
-                title = { Text("Registrar's Office") },
+                title = { Text("Settings") },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
             )
         },
@@ -130,88 +110,42 @@ fun SettingsScreen(onBack: () -> Unit) {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            SectionTitle("Student & institution")
-            OutlinedTextField(profile.studentName, { v -> repo.updateProfile { it.copy(studentName = v) } }, label = { Text("Your name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(profile.institution, { v -> repo.updateProfile { it.copy(institution = v) } }, label = { Text("Institution name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(profile.motto, { v -> repo.updateProfile { it.copy(motto = v) } }, label = { Text("Motto") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            SectionTitle("You")
+            OutlinedTextField(
+                profile.name,
+                { v -> repo.updateProfile { it.copy(name = v) } },
+                label = { Text("Your name (for certificates)") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
+                modifier = Modifier.fillMaxWidth(),
+            )
 
             Spacer(Modifier.height(4.dp))
-            SectionTitle("Weekly study goal")
-            Text(formatMinutes(profile.weeklyGoalMinutes) + " per week", style = MaterialTheme.typography.titleMedium)
+            SectionTitle("Weekly goal")
+            Text(formatMinutes(profile.weeklyGoalMinutes) + " a week", style = MaterialTheme.typography.titleMedium)
             Slider(
                 value = profile.weeklyGoalMinutes / 60f,
                 onValueChange = { h -> repo.updateProfile { it.copy(weeklyGoalMinutes = (h * 2).roundToInt() * 30) } },
                 valueRange = 1f..40f,
             )
-            Text(
-                "A full-time college load is roughly 2–3 hours of study per credit per week.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
 
             Spacer(Modifier.height(4.dp))
             SectionTitle("Notifications")
-            NotificationToggle(
-                "Class reminders",
-                "A heads-up before each scheduled class meeting",
-                profile.remindersEnabled,
-            ) { on -> toggle(on) { p, v -> p.copy(remindersEnabled = v) } }
-            if (profile.remindersEnabled) {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(start = 12.dp)) {
-                    listOf(0, 5, 10, 15, 30, 60).forEach { m ->
-                        FilterChip(
-                            selected = profile.reminderLeadMinutes == m,
-                            onClick = { repo.updateProfile { it.copy(reminderLeadMinutes = m) } },
-                            label = { Text(if (m == 0) "At start" else "${formatMinutes(m)} before") },
-                        )
-                    }
-                }
-                if (!ReminderScheduler.canScheduleExact(context) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    TextButton(onClick = {
-                        context.startActivity(
-                            Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:${context.packageName}")),
-                        )
-                    }) { Text("Allow on-time reminders (otherwise they may arrive a few minutes late)") }
-                }
-                ReminderScheduler.findNext(data)?.let { next ->
-                    Text(
-                        "Next: ${next.course.title} — ${next.meeting.label}, " +
-                            java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT)
-                                .format(java.util.Date(next.triggerMillis)),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(start = 12.dp),
-                    )
-                }
+            Toggle(
+                "Daily study reminder",
+                "Only on days you haven't studied yet",
+                profile.reminderEnabled,
+            ) { on -> toggle(on) { p, v -> p.copy(reminderEnabled = v) } }
+            if (profile.reminderEnabled) {
+                TimeField("Reminder time", profile.reminderMinute, { m -> repo.updateProfile { it.copy(reminderMinute = m) } })
             }
-            NotificationToggle(
-                "Morning briefing",
-                "Today's classes, what's due, and anything overdue",
-                profile.briefingEnabled,
-            ) { on -> toggle(on) { p, v -> p.copy(briefingEnabled = v) } }
-            if (profile.briefingEnabled) {
-                TimeField("Briefing time", profile.briefingMinute, { m -> repo.updateProfile { it.copy(briefingMinute = m) } }, Modifier.padding(start = 12.dp))
-            }
-            NotificationToggle(
-                "Study nudge",
-                "An evening reminder — only on days you haven't studied yet",
-                profile.nudgeEnabled,
-            ) { on -> toggle(on) { p, v -> p.copy(nudgeEnabled = v) } }
-            if (profile.nudgeEnabled) {
-                TimeField("Nudge time", profile.nudgeMinute, { m -> repo.updateProfile { it.copy(nudgeMinute = m) } }, Modifier.padding(start = 12.dp))
-            }
-            NotificationToggle(
-                "Weekly report",
-                "Sunday evening: hours vs. goal, streak, and the week ahead",
-                profile.weeklyReportEnabled,
-            ) { on -> toggle(on) { p, v -> p.copy(weeklyReportEnabled = v) } }
-            NotificationToggle(
-                "Session timer",
-                "Show the running timer with End & log while you study",
+            Toggle(
+                "Timer notification",
+                "Show the running timer with Stop & log while you study",
                 profile.sessionNotificationEnabled,
             ) { on -> toggle(on) { p, v -> p.copy(sessionNotificationEnabled = v) } }
-            OutlinedButton(onClick = { withNotifications { Notifier.postTest(context, data) } }) {
-                Text("Send a test notification")
+            OutlinedButton(onClick = { withNotifications { Notifier.postReminder(context, data, force = true) } }) {
+                Text("Send a test reminder")
             }
 
             val widgets = context.getSystemService(AppWidgetManager::class.java)
@@ -219,91 +153,33 @@ fun SettingsScreen(onBack: () -> Unit) {
                 Spacer(Modifier.height(4.dp))
                 SectionTitle("Home screen widget")
                 Text(
-                    "Show today's classes on your home screen — tap a class to jump into its course.",
+                    "This week's study time and what you're working on.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 OutlinedButton(onClick = {
                     widgets.requestPinAppWidget(ComponentName(context, TodayWidgetReceiver::class.java), null, null)
-                }) { Text("Add \"Today's classes\" widget") }
+                }) { Text("Add widget") }
             }
 
             Spacer(Modifier.height(4.dp))
-            SectionTitle("Departments", action = {
-                TextButton(onClick = { addingDept = true }) { Icon(Icons.Filled.Add, null); Text("Found") }
-            })
-            if (data.departments.isEmpty()) {
-                Text("No departments yet. Courses without one are listed under General Studies.", style = MaterialTheme.typography.bodySmall)
-            }
-            data.departments.sortedBy { it.name }.forEach { d ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    ColorDot(deptColor(d.colorIndex), 14)
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(d.name, style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            "${d.code} · " + data.courses.count { it.departmentId == d.id }.let { n -> "$n course${if (n == 1) "" else "s"}" },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    IconButton(onClick = { editDept = d }) { Icon(Icons.Filled.Edit, "Edit department") }
-                    IconButton(onClick = { deletingDept = d }) { Icon(Icons.Filled.Delete, "Delete department") }
-                }
-            }
-
-            Spacer(Modifier.height(4.dp))
-            SectionTitle("Records")
+            SectionTitle("Backup")
             Text(
-                "Everything stays on this phone. Export a backup file to keep your records safe or move them to a new device.",
+                "Everything stays on this phone. Save a backup file to keep it safe or move to a new device.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { exporter.launch("alma-records-${LocalDate.now()}.json") }) { Text("Export backup") }
-                OutlinedButton(onClick = { confirmImport = true }) { Text("Restore backup") }
+                OutlinedButton(onClick = { exporter.launch("alma-backup-${LocalDate.now()}.json") }) { Text("Save backup") }
+                OutlinedButton(onClick = { confirmImport = true }) { Text("Restore") }
             }
-            OutlinedButton(onClick = {
-                repo.loadSample()
-                scope.launch { snackbar.showSnackbar("Added PHIL 110 & PHIL 210 and a Critical Thinking certificate.") }
-            }) { Text("Add sample logic courses") }
-            Spacer(Modifier.height(24.dp))
-            Text(
-                "Alma · your personal university",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.outline,
-                modifier = Modifier.fillMaxWidth(),
-            )
         }
     }
 
-    if (addingDept || editDept != null) {
-        DepartmentDialog(
-            initial = editDept,
-            onDismiss = {
-                addingDept = false
-                editDept = null
-            },
-            onSave = {
-                repo.saveDepartment(it)
-                addingDept = false
-                editDept = null
-            },
-        )
-    }
-    deletingDept?.let { d ->
-        ConfirmDialog(
-            title = "Close the ${d.name} department?",
-            text = "Its courses stay in your catalog and move to General Studies.",
-            confirmLabel = "Close department",
-            onConfirm = { repo.deleteDepartment(d.id) },
-            onDismiss = { deletingDept = null },
-        )
-    }
     if (confirmImport) {
         ConfirmDialog(
             title = "Restore from backup?",
-            text = "This replaces all current courses, departments and records with the contents of the backup file.",
+            text = "This replaces everything in the app with the contents of the backup file.",
             confirmLabel = "Choose file",
             onConfirm = { importer.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
             onDismiss = { confirmImport = false },
@@ -312,7 +188,7 @@ fun SettingsScreen(onBack: () -> Unit) {
 }
 
 @Composable
-private fun NotificationToggle(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+private fun Toggle(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.bodyLarge)

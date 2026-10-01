@@ -4,9 +4,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.MenuBook
-import androidx.compose.material.icons.filled.AccountBalance
-import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -16,51 +14,36 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
-import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import androidx.navigation.navArgument
-import com.z1fire.alma.ui.screens.BulletinScreen
-import com.z1fire.alma.ui.screens.CampusScreen
-import com.z1fire.alma.ui.screens.CatalogScreen
-import com.z1fire.alma.ui.screens.CourseDetailScreen
-import com.z1fire.alma.ui.screens.CourseEditScreen
-import com.z1fire.alma.ui.screens.ScheduleScreen
+import com.z1fire.alma.ui.screens.CourseScreen
+import com.z1fire.alma.ui.screens.FinishedScreen
+import com.z1fire.alma.ui.screens.HomeScreen
 import com.z1fire.alma.ui.screens.SettingsScreen
-import com.z1fire.alma.ui.screens.TranscriptScreen
-import com.z1fire.alma.ui.screens.WelcomeScreen
 
 private data class Tab(val route: String, val label: String, val icon: ImageVector)
 
 private val tabs = listOf(
-    Tab("campus", "Campus", Icons.Filled.AccountBalance),
-    Tab("catalog", "Catalog", Icons.AutoMirrored.Filled.MenuBook),
-    Tab("schedule", "Schedule", Icons.Filled.CalendarMonth),
-    Tab("transcript", "Transcript", Icons.Filled.WorkspacePremium),
+    Tab("studying", "Studying", Icons.Filled.AutoStories),
+    Tab("finished", "Finished", Icons.Filled.WorkspacePremium),
 )
 
-private const val EDIT_ROUTE = "edit?id={id}"
-
 private fun NavHostController.openCourse(id: String) = navigate("course/$id") { launchSingleTop = true }
-private fun NavHostController.editCourse(id: String?) = navigate(if (id == null) "edit" else "edit?id=$id")
 
 @Composable
 fun AlmaNavHost(pendingCourseId: String?, onPendingConsumed: () -> Unit) {
-    val data = rememberAppData()
     val nav = rememberNavController()
     val entry by nav.currentBackStackEntryAsState()
     val route = entry?.destination?.route
-    val start = remember { if (data.profile.onboarded) "campus" else "welcome" }
 
-    LaunchedEffect(pendingCourseId, data.profile.onboarded) {
-        if (pendingCourseId != null && data.profile.onboarded) {
+    LaunchedEffect(pendingCourseId) {
+        if (pendingCourseId != null) {
             nav.openCourse(pendingCourseId)
             onPendingConsumed()
         }
@@ -91,67 +74,22 @@ fun AlmaNavHost(pendingCourseId: String?, onPendingConsumed: () -> Unit) {
     ) { padding ->
         NavHost(
             navController = nav,
-            startDestination = start,
+            startDestination = "studying",
             modifier = Modifier
                 .padding(padding)
                 .consumeWindowInsets(padding),
         ) {
-            composable("welcome") {
-                WelcomeScreen(onDone = {
-                    nav.navigate("campus") { popUpTo("welcome") { inclusive = true } }
-                })
+            composable("studying") {
+                HomeScreen(onOpenCourse = nav::openCourse, onOpenSettings = { nav.navigate("settings") })
             }
-            composable("campus") {
-                CampusScreen(
-                    onOpenCourse = nav::openCourse,
-                    onOpenSettings = { nav.navigate("settings") },
-                    onNewCourse = { nav.editCourse(null) },
-                    onBrowseBulletin = { nav.navigate("bulletin") },
-                )
-            }
-            composable("catalog") {
-                CatalogScreen(
-                    onOpenCourse = nav::openCourse,
-                    onNewCourse = { nav.editCourse(null) },
-                    onBrowseBulletin = { nav.navigate("bulletin") },
-                )
-            }
-            composable("bulletin") {
-                BulletinScreen(onBack = { nav.popBackStack() }, onOpenCourse = nav::openCourse)
-            }
-            composable("schedule") {
-                ScheduleScreen(onOpenCourse = nav::openCourse)
-            }
-            composable("transcript") {
-                TranscriptScreen(onOpenCourse = nav::openCourse)
+            composable("finished") {
+                FinishedScreen(onOpenCourse = nav::openCourse)
             }
             composable("settings") {
                 SettingsScreen(onBack = { nav.popBackStack() })
             }
             composable("course/{id}") { e ->
-                CourseDetailScreen(
-                    courseId = e.arguments?.getString("id").orEmpty(),
-                    onBack = { nav.popBackStack() },
-                    onEdit = { nav.editCourse(it) },
-                    onOpenCourse = nav::openCourse,
-                )
-            }
-            composable(
-                EDIT_ROUTE,
-                arguments = listOf(navArgument("id") { type = NavType.StringType; nullable = true; defaultValue = null }),
-            ) { e ->
-                val id = e.arguments?.getString("id")
-                CourseEditScreen(
-                    courseId = id,
-                    onBack = { nav.popBackStack() },
-                    onSaved = { savedId ->
-                        if (id == null) {
-                            nav.navigate("course/$savedId") { popUpTo(EDIT_ROUTE) { inclusive = true } }
-                        } else {
-                            nav.popBackStack()
-                        }
-                    },
-                )
+                CourseScreen(courseId = e.arguments?.getString("id").orEmpty(), onBack = { nav.popBackStack() })
             }
         }
     }

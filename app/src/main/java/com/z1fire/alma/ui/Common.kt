@@ -2,47 +2,32 @@ package com.z1fire.alma.ui
 
 import android.text.format.DateFormat
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
@@ -63,22 +48,14 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.z1fire.alma.data.AppData
-import com.z1fire.alma.data.Course
-import com.z1fire.alma.data.CourseStatus
 import com.z1fire.alma.data.Repository
-import com.z1fire.alma.data.codeOf
-import com.z1fire.alma.data.department
-import com.z1fire.alma.ui.theme.deptColor
-import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
-import java.time.format.TextStyle
 import java.util.Locale
 
 val LocalRepository = staticCompositionLocalOf<Repository> { error("Repository not provided") }
@@ -93,16 +70,12 @@ fun rememberAppData(): AppData {
 
 private val longDate = DateTimeFormatter.ofPattern("MMM d, yyyy")
 private val shortDate = DateTimeFormatter.ofPattern("EEE, MMM d")
-private val monthDay = DateTimeFormatter.ofPattern("MMM d")
 
 fun formatDate(epochDay: Long): String = LocalDate.ofEpochDay(epochDay).format(longDate)
 fun formatShortDate(epochDay: Long): String = LocalDate.ofEpochDay(epochDay).format(shortDate)
-fun formatMonthDay(date: LocalDate): String = date.format(monthDay)
 
 fun formatTime(minuteOfDay: Int): String =
     LocalTime.of((minuteOfDay / 60) % 24, minuteOfDay % 60).format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT))
-
-fun formatTimeRange(start: Int, duration: Int) = "${formatTime(start)} – ${formatTime(start + duration)}"
 
 fun formatMinutes(m: Int): String = when {
     m < 60 -> "${m}m"
@@ -110,25 +83,12 @@ fun formatMinutes(m: Int): String = when {
     else -> "${m / 60}h ${m % 60}m"
 }
 
-fun dayName(dow: Int, short: Boolean = true): String =
-    DayOfWeek.of(dow).getDisplayName(if (short) TextStyle.SHORT else TextStyle.FULL, Locale.getDefault())
-
-fun relativeDue(epochDay: Long, today: LocalDate): String {
-    val diff = epochDay - today.toEpochDay()
-    return when {
-        diff < -1 -> "Overdue by ${-diff} days"
-        diff == -1L -> "Was due yesterday"
-        diff == 0L -> "Due today"
-        diff == 1L -> "Due tomorrow"
-        diff < 7 -> "Due ${dayName(LocalDate.ofEpochDay(epochDay).dayOfWeek.value, short = false)}"
-        else -> "Due ${formatShortDate(epochDay)}"
-    }
+/** "3 hours", "1.5 hours", "45 minutes" — for certificates and summaries. */
+fun formatHoursLong(m: Int): String {
+    if (m < 60) return "$m minute${if (m == 1) "" else "s"}"
+    val text = if (m % 60 == 0) "${m / 60}" else String.format(Locale.US, "%.1f", m / 60.0)
+    return "$text hour${if (text == "1") "" else "s"}"
 }
-
-fun gpaText(gpa: Double?): String = gpa?.let { String.format(Locale.US, "%.2f", it) } ?: "—"
-
-fun initials(name: String): String =
-    name.split(" ").filter { it.isNotBlank() }.take(2).joinToString("") { it.first().uppercase() }.ifEmpty { "?" }
 
 // ---------- small building blocks ----------
 
@@ -145,30 +105,6 @@ fun SectionTitle(text: String, modifier: Modifier = Modifier, action: (@Composab
         )
         action?.invoke()
     }
-}
-
-@Composable
-fun StatusChip(status: CourseStatus) {
-    val (bg, fg) = when (status) {
-        CourseStatus.ENROLLED -> MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.onPrimaryContainer
-        CourseStatus.COMPLETED -> MaterialTheme.colorScheme.tertiaryContainer to MaterialTheme.colorScheme.onTertiaryContainer
-        CourseStatus.PLANNED -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
-        CourseStatus.DROPPED -> MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer
-    }
-    Pill(status.label, bg, fg)
-}
-
-@Composable
-fun Pill(text: String, bg: Color, fg: Color, modifier: Modifier = Modifier) {
-    Text(
-        text,
-        style = MaterialTheme.typography.labelMedium,
-        color = fg,
-        modifier = modifier
-            .clip(RoundedCornerShape(50))
-            .background(bg)
-            .padding(horizontal = 10.dp, vertical = 3.dp),
-    )
 }
 
 @Composable
@@ -193,7 +129,7 @@ fun EmptyState(
     Column(
         modifier
             .fillMaxWidth()
-            .padding(horizontal = 32.dp, vertical = 40.dp),
+            .padding(horizontal = 32.dp, vertical = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Icon(icon, null, Modifier.size(56.dp), tint = MaterialTheme.colorScheme.outline)
@@ -213,66 +149,12 @@ fun EmptyState(
     }
 }
 
-/** Card used for courses in lists: accent bar in the department color, code, title, meta and progress. */
+/** A big number with a small caption, used in stat rows. */
 @Composable
-fun CourseCard(data: AppData, course: Course, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val dept = data.department(course.departmentId)
-    val accent = deptColor(dept?.colorIndex)
-    Card(
-        onClick = onClick,
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-    ) {
-        Row(Modifier.height(IntrinsicSize.Min)) {
-            Box(
-                Modifier
-                    .width(6.dp)
-                    .fillMaxHeight()
-                    .background(accent),
-            )
-            Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp).weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        data.codeOf(course),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = accent,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.weight(1f),
-                    )
-                    if (course.status == CourseStatus.COMPLETED && course.finalGrade != null) {
-                        Pill(course.finalGrade, MaterialTheme.colorScheme.tertiaryContainer, MaterialTheme.colorScheme.onTertiaryContainer)
-                    } else {
-                        StatusChip(course.status)
-                    }
-                }
-                Text(
-                    course.title.ifBlank { "Untitled course" },
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                val meta = listOfNotNull(
-                    "${course.credits} credit${if (course.credits == 1) "" else "s"}",
-                    course.term.ifBlank { null },
-                    if (course.totalMinutes > 0) "${formatMinutes(course.totalMinutes)} studied" else null,
-                ).joinToString(" · ")
-                Text(meta, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (course.status == CourseStatus.ENROLLED) {
-                    Spacer(Modifier.height(8.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        LinearProgressIndicator(
-                            progress = { course.progress },
-                            modifier = Modifier.weight(1f).height(6.dp).clip(RoundedCornerShape(3.dp)),
-                            color = accent,
-                            trackColor = accent.copy(alpha = 0.18f),
-                            drawStopIndicator = {},
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text("${(course.progress * 100).toInt()}%", style = MaterialTheme.typography.labelSmall)
-                    }
-                }
-            }
-        }
+fun Stat(value: String, caption: String, modifier: Modifier = Modifier) {
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(value, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+        Text(caption, style = MaterialTheme.typography.labelSmall, color = LocalContentColor.current.copy(alpha = 0.72f))
     }
 }
 
@@ -332,14 +214,7 @@ fun FormDialog(
 
 /** Read-only text field that runs [onClick] when tapped. */
 @Composable
-private fun ClickableField(
-    label: String,
-    value: String,
-    icon: ImageVector,
-    modifier: Modifier = Modifier,
-    onClear: (() -> Unit)? = null,
-    onClick: () -> Unit,
-) {
+private fun ClickableField(label: String, value: String, icon: ImageVector, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
     LaunchedEffect(interaction) {
         interaction.interactions.collect { if (it is PressInteraction.Release) onClick() }
@@ -350,7 +225,6 @@ private fun ClickableField(
         readOnly = true,
         label = { Text(label) },
         leadingIcon = { Icon(icon, null) },
-        trailingIcon = onClear?.let { clear -> { IconButton(onClick = clear) { Icon(Icons.Filled.Close, "Clear") } } },
         interactionSource = interaction,
         singleLine = true,
         modifier = modifier.fillMaxWidth(),
@@ -359,18 +233,11 @@ private fun ClickableField(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DateField(label: String, epochDay: Long?, onChange: (Long?) -> Unit, modifier: Modifier = Modifier) {
+fun DateField(label: String, epochDay: Long, onChange: (Long) -> Unit, modifier: Modifier = Modifier) {
     var show by remember { mutableStateOf(false) }
-    ClickableField(
-        label = label,
-        value = epochDay?.let { formatDate(it) } ?: "",
-        icon = Icons.Filled.CalendarMonth,
-        modifier = modifier,
-        onClear = if (epochDay != null) ({ onChange(null) }) else null,
-        onClick = { show = true },
-    )
+    ClickableField(label, formatDate(epochDay), Icons.Filled.CalendarMonth, modifier, onClick = { show = true })
     if (show) {
-        val state = rememberDatePickerState(initialSelectedDateMillis = (epochDay ?: LocalDate.now().toEpochDay()) * DAY_MS)
+        val state = rememberDatePickerState(initialSelectedDateMillis = epochDay * DAY_MS)
         DatePickerDialog(
             onDismissRequest = { show = false },
             confirmButton = {
@@ -408,63 +275,6 @@ fun TimeField(label: String, minuteOfDay: Int, onChange: (Int) -> Unit, modifier
             text = { TimePicker(state) },
         )
     }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun <T> Dropdown(
-    label: String,
-    options: List<T>,
-    selected: T,
-    display: (T) -> String,
-    onSelect: (T) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    var expanded by remember { mutableStateOf(false) }
-    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }, modifier = modifier) {
-        OutlinedTextField(
-            value = display(selected),
-            onValueChange = {},
-            readOnly = true,
-            singleLine = true,
-            label = { Text(label) },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-            modifier = Modifier
-                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
-                .fillMaxWidth(),
-        )
-        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            options.forEach { option ->
-                DropdownMenuItem(
-                    text = { Text(display(option)) },
-                    onClick = {
-                        onSelect(option)
-                        expanded = false
-                    },
-                )
-            }
-        }
-    }
-}
-
-/** A labelled number with a small caption, used in stat rows. */
-@Composable
-fun Stat(value: String, caption: String, modifier: Modifier = Modifier, color: Color = Color.Unspecified) {
-    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, style = MaterialTheme.typography.headlineSmall, color = color, fontWeight = FontWeight.SemiBold)
-        Text(caption, style = MaterialTheme.typography.labelSmall, color = LocalContentColor.current.copy(alpha = 0.72f))
-    }
-}
-
-@Composable
-fun ClickableRow(onClick: () -> Unit, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick),
-        color = Color.Transparent,
-    ) { content() }
 }
 
 const val DAY_MS = 86_400_000L

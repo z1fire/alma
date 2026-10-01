@@ -4,19 +4,28 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Checkbox
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -27,33 +36,154 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.z1fire.alma.data.Assignment
-import com.z1fire.alma.data.AssignmentType
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.z1fire.alma.data.Course
-import com.z1fire.alma.data.Department
-import com.z1fire.alma.data.Grades
-import com.z1fire.alma.data.Meeting
-import com.z1fire.alma.data.Module
-import com.z1fire.alma.data.Resource
-import com.z1fire.alma.data.ResourceStatus
-import com.z1fire.alma.data.ResourceType
+import com.z1fire.alma.data.CourseStatus
+import com.z1fire.alma.data.Idea
+import com.z1fire.alma.data.StudyItem
+import com.z1fire.alma.data.starterIdeas
 import com.z1fire.alma.ui.ColorDot
 import com.z1fire.alma.ui.DateField
-import com.z1fire.alma.ui.Dropdown
 import com.z1fire.alma.ui.FormDialog
-import com.z1fire.alma.ui.TimeField
-import com.z1fire.alma.ui.dayName
+import com.z1fire.alma.ui.formatDate
+import com.z1fire.alma.ui.formatHoursLong
 import com.z1fire.alma.ui.formatMinutes
 import com.z1fire.alma.ui.theme.DeptColors
+import com.z1fire.alma.ui.theme.Gold
 import java.time.LocalDate
+
+/** Create a course (optionally from a starter idea) or edit one. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun CourseDialog(initial: Course?, onDismiss: () -> Unit, onSave: (Course) -> Unit) {
+    val isNew = initial == null
+    var title by remember { mutableStateOf(initial?.title ?: "") }
+    var subject by remember { mutableStateOf(initial?.subject ?: "") }
+    var notes by remember { mutableStateOf(initial?.notes ?: "") }
+    var color by remember { mutableIntStateOf(initial?.colorIndex ?: DeptColors.indices.random()) }
+    var startNow by remember { mutableStateOf(true) }
+    var idea by remember { mutableStateOf<Idea?>(null) }
+
+    FormDialog(
+        title = if (isNew) "New course" else "Edit course",
+        onDismiss = onDismiss,
+        saveEnabled = title.isNotBlank(),
+        saveLabel = if (isNew) "Create" else "Save",
+        onSave = {
+            val status = if (startNow) CourseStatus.ACTIVE else CourseStatus.SOMEDAY
+            val base = initial ?: (idea?.toCourse(status) ?: Course(title = "", status = status)).copy(
+                startedEpochDay = if (startNow) LocalDate.now().toEpochDay() else null,
+            )
+            onSave(base.copy(title = title.trim(), subject = subject.trim(), notes = notes.trim(), colorIndex = color))
+        },
+    ) {
+        if (isNew) {
+            Text("Start from an idea, or type your own.", style = MaterialTheme.typography.bodySmall)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                starterIdeas.forEach { i ->
+                    FilterChip(
+                        selected = idea == i,
+                        onClick = {
+                            if (idea == i) {
+                                idea = null
+                            } else {
+                                idea = i
+                                title = i.title
+                                subject = i.subject
+                                color = i.colorIndex
+                            }
+                        },
+                        label = { Text(i.title) },
+                    )
+                }
+            }
+            idea?.let {
+                Text(
+                    "Adds a starter list of ${it.items.size} things to study — edit freely.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
+        OutlinedTextField(
+            title, { title = it },
+            label = { Text("What are you learning?") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        OutlinedTextField(
+            subject, { subject = it },
+            label = { Text("Subject (optional)") },
+            placeholder = { Text("Languages, Biology, Music…") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        OutlinedTextField(
+            notes, { notes = it },
+            label = { Text("Notes (optional)") },
+            placeholder = { Text("Goals, why you're learning this…") },
+            minLines = 2,
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            DeptColors.forEachIndexed { i, c ->
+                Box(
+                    Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .clickable { color = i }
+                        .then(if (i == color) Modifier.border(3.dp, MaterialTheme.colorScheme.onSurface, CircleShape) else Modifier),
+                    contentAlignment = Alignment.Center,
+                ) { ColorDot(c, 26) }
+            }
+        }
+        if (isNew) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected = startNow, onClick = { startNow = true }, label = { Text("Start now") })
+                FilterChip(selected = !startNow, onClick = { startNow = false }, label = { Text("Save for later") })
+            }
+        }
+    }
+}
+
+@Composable
+fun ItemDialog(initial: StudyItem, onDismiss: () -> Unit, onSave: (StudyItem) -> Unit, onDelete: () -> Unit) {
+    var text by remember { mutableStateOf(initial.text) }
+    var link by remember { mutableStateOf(initial.link) }
+    FormDialog(
+        title = "Edit item",
+        onDismiss = onDismiss,
+        onSave = { onSave(initial.copy(text = text.trim(), link = link.trim())) },
+        saveEnabled = text.isNotBlank(),
+        onDelete = onDelete,
+    ) {
+        OutlinedTextField(text, { text = it }, label = { Text("Book, topic, chapter…") }, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(
+            link, { link = it },
+            label = { Text("Link (optional)") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun LogSessionDialog(
-    title: String = "Log study session",
-    initialMinutes: Int = 45,
+fun LogTimeDialog(
+    title: String = "Log study time",
+    initialMinutes: Int = 30,
     showDate: Boolean = true,
     onDismiss: () -> Unit,
     onSave: (epochDay: Long, minutes: Int, notes: String) -> Unit,
@@ -63,7 +193,7 @@ fun LogSessionDialog(
     var notes by remember { mutableStateOf("") }
     val minutes = minutesText.toIntOrNull() ?: 0
     FormDialog(title, onDismiss, onSave = { onSave(day, minutes, notes.trim()) }, saveEnabled = minutes > 0) {
-        if (showDate) DateField("Date", day, { it?.let { d -> day = d } })
+        if (showDate) DateField("Date", day, { day = it })
         OutlinedTextField(
             value = minutesText,
             onValueChange = { minutesText = it.filter(Char::isDigit).take(4) },
@@ -81,7 +211,7 @@ fun LogSessionDialog(
         OutlinedTextField(
             value = notes,
             onValueChange = { notes = it },
-            label = { Text("What did you cover?") },
+            label = { Text("What did you cover? (optional)") },
             minLines = 2,
             modifier = Modifier.fillMaxWidth(),
         )
@@ -89,195 +219,92 @@ fun LogSessionDialog(
 }
 
 @Composable
-fun ModuleDialog(initial: Module, isNew: Boolean, onDismiss: () -> Unit, onSave: (Module) -> Unit, onDelete: () -> Unit) {
-    var title by remember { mutableStateOf(initial.title) }
-    var notes by remember { mutableStateOf(initial.notes) }
-    FormDialog(
-        title = if (isNew) "Add unit" else "Edit unit",
-        onDismiss = onDismiss,
-        onSave = { onSave(initial.copy(title = title.trim(), notes = notes.trim())) },
-        saveEnabled = title.isNotBlank(),
-        onDelete = if (isNew) null else onDelete,
-    ) {
-        OutlinedTextField(title, { title = it }, label = { Text("Unit title") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(notes, { notes = it }, label = { Text("Topics & notes") }, minLines = 3, modifier = Modifier.fillMaxWidth())
-    }
-}
-
-@Composable
-fun ResourceDialog(initial: Resource, isNew: Boolean, onDismiss: () -> Unit, onSave: (Resource) -> Unit, onDelete: () -> Unit) {
-    var r by remember { mutableStateOf(initial) }
-    FormDialog(
-        title = if (isNew) "Add to reading list" else "Edit resource",
-        onDismiss = onDismiss,
-        onSave = { onSave(r.copy(title = r.title.trim(), author = r.author.trim(), url = r.url.trim(), notes = r.notes.trim())) },
-        saveEnabled = r.title.isNotBlank(),
-        onDelete = if (isNew) null else onDelete,
-    ) {
-        Dropdown("Type", ResourceType.entries, r.type, { it.label }, { r = r.copy(type = it) })
-        OutlinedTextField(r.title, { r = r.copy(title = it) }, label = { Text("Title") }, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(r.author, { r = r.copy(author = it) }, label = { Text("Author / creator") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(
-            r.url, { r = r.copy(url = it) }, label = { Text("Link (optional)") }, singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri), modifier = Modifier.fillMaxWidth(),
-        )
-        Dropdown("Status", ResourceStatus.entries, r.status, { it.label }, { r = r.copy(status = it) })
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Required reading", Modifier.weight(1f))
-            Switch(checked = r.required, onCheckedChange = { r = r.copy(required = it) })
-        }
-        OutlinedTextField(r.notes, { r = r.copy(notes = it) }, label = { Text("Notes (chapters, edition…)") }, minLines = 2, modifier = Modifier.fillMaxWidth())
-    }
-}
-
-@Composable
-fun AssignmentDialog(initial: Assignment, isNew: Boolean, onDismiss: () -> Unit, onSave: (Assignment) -> Unit, onDelete: () -> Unit) {
-    var a by remember { mutableStateOf(initial) }
-    FormDialog(
-        title = if (isNew) "New assignment" else "Edit assignment",
-        onDismiss = onDismiss,
-        onSave = { onSave(a.copy(title = a.title.trim(), grade = a.grade.trim(), notes = a.notes.trim())) },
-        saveEnabled = a.title.isNotBlank(),
-        onDelete = if (isNew) null else onDelete,
-    ) {
-        OutlinedTextField(a.title, { a = a.copy(title = it) }, label = { Text("Title") }, modifier = Modifier.fillMaxWidth())
-        Dropdown("Type", AssignmentType.entries, a.type, { it.label }, { a = a.copy(type = it) })
-        DateField("Due date", a.dueEpochDay, { a = a.copy(dueEpochDay = it) })
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(checked = a.done, onCheckedChange = { a = a.copy(done = it) })
-            Text("Completed")
-        }
-        OutlinedTextField(a.grade, { a = a.copy(grade = it) }, label = { Text("Self-assessed grade or score") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(a.notes, { a = a.copy(notes = it) }, label = { Text("Instructions / notes") }, minLines = 2, modifier = Modifier.fillMaxWidth())
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-fun MeetingDialog(initial: Meeting?, onDismiss: () -> Unit, onSave: (List<Meeting>) -> Unit, onDelete: () -> Unit) {
-    val isNew = initial == null
-    var days by remember { mutableStateOf(setOf(initial?.dayOfWeek ?: LocalDate.now().dayOfWeek.value)) }
-    var start by remember { mutableIntStateOf(initial?.startMinute ?: (19 * 60)) }
-    var duration by remember { mutableIntStateOf(initial?.durationMinutes ?: 60) }
-    var label by remember { mutableStateOf(initial?.label ?: "Lecture") }
-    var location by remember { mutableStateOf(initial?.location ?: "") }
-    FormDialog(
-        title = if (isNew) "Add class meeting" else "Edit class meeting",
-        onDismiss = onDismiss,
-        onSave = {
-            val base = Meeting(dayOfWeek = 1, startMinute = start, durationMinutes = duration, label = label.trim().ifBlank { "Class" }, location = location.trim())
-            onSave(
-                if (initial != null) listOf(base.copy(id = initial.id, dayOfWeek = days.first()))
-                else days.sorted().map { base.copy(id = com.z1fire.alma.data.newId(), dayOfWeek = it) },
-            )
-        },
-        saveEnabled = days.isNotEmpty(),
-        onDelete = if (isNew) null else onDelete,
-    ) {
-        Text(if (isNew) "Meets on (pick one or more)" else "Meets on", style = MaterialTheme.typography.labelLarge)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            (1..7).forEach { d ->
-                FilterChip(
-                    selected = d in days,
-                    onClick = { days = if (isNew) (if (d in days) days - d else days + d) else setOf(d) },
-                    label = { Text(dayName(d)) },
-                )
-            }
-        }
-        TimeField("Starts at", start, { start = it })
-        Text("Length", style = MaterialTheme.typography.labelLarge)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf(30, 45, 60, 90, 120, 180).forEach { m ->
-                FilterChip(selected = duration == m, onClick = { duration = m }, label = { Text(formatMinutes(m)) })
-            }
-        }
-        OutlinedTextField(label, { label = it }, label = { Text("Kind (Lecture, Seminar, Lab…)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(location, { location = it }, label = { Text("Where (desk, library, café…)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-fun DepartmentDialog(initial: Department?, onDismiss: () -> Unit, onSave: (Department) -> Unit) {
-    var name by remember { mutableStateOf(initial?.name ?: "") }
-    var code by remember { mutableStateOf(initial?.code ?: "") }
-    var codeEdited by remember { mutableStateOf(initial != null) }
-    var color by remember { mutableIntStateOf(initial?.colorIndex ?: (0..9).random()) }
-    FormDialog(
-        title = if (initial == null) "Found a department" else "Edit department",
-        onDismiss = onDismiss,
-        onSave = {
-            val c = code.trim().uppercase().ifBlank { name.filter(Char::isLetter).take(4).uppercase() }
-            onSave((initial ?: Department(name = "", code = "")).copy(name = name.trim(), code = c, colorIndex = color))
-        },
-        saveEnabled = name.isNotBlank(),
-    ) {
-        OutlinedTextField(
-            name,
-            {
-                name = it
-                if (!codeEdited) code = it.filter(Char::isLetter).take(4).uppercase()
-            },
-            label = { Text("Name (e.g. Philosophy)") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        OutlinedTextField(
-            code,
-            {
-                code = it.uppercase().take(6)
-                codeEdited = true
-            },
-            label = { Text("Course code prefix (e.g. PHIL)") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Text("Color", style = MaterialTheme.typography.labelLarge)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            DeptColors.forEachIndexed { i, c ->
-                Box(
-                    Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .clickable { color = i }
-                        .then(
-                            if (i == color) Modifier.border(3.dp, MaterialTheme.colorScheme.onSurface, CircleShape) else Modifier,
-                        ),
-                    contentAlignment = Alignment.Center,
-                ) { ColorDot(c, 30) }
-            }
-        }
-    }
-}
-
-@Composable
-fun CompleteCourseDialog(course: Course, onDismiss: () -> Unit, onComplete: (grade: String, reflection: String, epochDay: Long) -> Unit) {
-    var grade by remember { mutableStateOf(course.finalGrade ?: "A") }
+fun FinishDialog(course: Course, onDismiss: () -> Unit, onFinish: (reflection: String) -> Unit) {
     var reflection by remember { mutableStateOf(course.reflection) }
-    var day by remember { mutableLongStateOf(LocalDate.now().toEpochDay()) }
     FormDialog(
-        title = "Complete course",
+        title = "Finish ${course.title}?",
         onDismiss = onDismiss,
-        onSave = { onComplete(grade, reflection.trim(), day) },
-        saveLabel = "Graduate this course",
+        onSave = { onFinish(reflection.trim()) },
+        saveLabel = "Mark finished",
     ) {
-        Text(
-            "Grade yourself honestly against your learning objectives. Letter grades count toward your GPA; Pass and Audit do not.",
-            style = MaterialTheme.typography.bodyMedium,
+        val stats = listOfNotNull(
+            course.totalMinutes.takeIf { it > 0 }?.let { "${formatHoursLong(it)} of study" },
+            course.items.takeIf { it.isNotEmpty() }?.let { "${course.doneCount} of ${it.size} items done" },
         )
-        if (course.objectives.isNotEmpty()) {
-            course.objectives.forEach {
-                Text("•  $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-        Dropdown("Final grade", Grades.all, grade, { Grades.label(it) }, { grade = it })
-        DateField("Completed on", day, { it?.let { d -> day = d } })
+        if (stats.isNotEmpty()) Text(stats.joinToString(" · "), style = MaterialTheme.typography.bodyMedium)
         OutlinedTextField(
             reflection,
             { reflection = it },
-            label = { Text("Reflection: what did you learn?") },
-            minLines = 4,
+            label = { Text("What did you learn? (optional)") },
+            minLines = 3,
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
             modifier = Modifier.fillMaxWidth(),
         )
+    }
+}
+
+/** A printable-looking certificate of completion for a finished course. */
+@Composable
+fun CertificateDialog(name: String, course: Course, onDismiss: () -> Unit) {
+    val parchment = Color(0xFFFBF5E6)
+    val ink = Color(0xFF2A2418)
+    val navy = Color(0xFF1F3A5F)
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(color = parchment, shape = RoundedCornerShape(6.dp), modifier = Modifier.padding(16.dp).fillMaxWidth()) {
+            Box(
+                Modifier
+                    .padding(8.dp)
+                    .border(3.dp, Gold, RoundedCornerShape(4.dp))
+                    .padding(4.dp)
+                    .border(1.dp, Gold, RoundedCornerShape(2.dp)),
+            ) {
+                Column(
+                    Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text("CERTIFICATE OF COMPLETION", style = MaterialTheme.typography.labelLarge, color = navy)
+                    Spacer(Modifier.height(16.dp))
+                    Text("This certifies that", style = MaterialTheme.typography.bodyMedium, fontFamily = FontFamily.Serif, fontStyle = FontStyle.Italic, color = ink)
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        name.ifBlank { "a dedicated learner" },
+                        style = MaterialTheme.typography.displaySmall,
+                        fontStyle = FontStyle.Italic,
+                        color = ink,
+                        textAlign = TextAlign.Center,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text("has completed a self-directed course in", style = MaterialTheme.typography.bodyMedium, fontFamily = FontFamily.Serif, color = ink)
+                    Spacer(Modifier.height(6.dp))
+                    Text(course.title, style = MaterialTheme.typography.headlineMedium, color = navy, textAlign = TextAlign.Center)
+                    Spacer(Modifier.height(12.dp))
+                    val stats = listOfNotNull(
+                        course.totalMinutes.takeIf { it > 0 }?.let { formatHoursLong(it) + " of study" },
+                        course.doneCount.takeIf { it > 0 }?.let { "$it item${if (it == 1) "" else "s"} completed" },
+                    )
+                    if (stats.isNotEmpty()) {
+                        Text(stats.joinToString("  ·  "), style = MaterialTheme.typography.bodyMedium, fontFamily = FontFamily.Serif, color = ink)
+                    }
+                    Spacer(Modifier.height(20.dp))
+                    Box(
+                        Modifier.size(64.dp).clip(CircleShape).border(3.dp, Gold, CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(Icons.Filled.School, null, tint = Gold, modifier = Modifier.size(32.dp)) }
+                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        formatDate(course.finishedEpochDay ?: LocalDate.now().toEpochDay()),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontFamily = FontFamily.Serif,
+                        color = ink,
+                    )
+                    if (course.reflection.isNotBlank()) {
+                        Spacer(Modifier.height(10.dp))
+                        Text("“${course.reflection}”", style = MaterialTheme.typography.bodySmall, fontStyle = FontStyle.Italic, color = ink.copy(alpha = 0.75f), textAlign = TextAlign.Center)
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    TextButton(onClick = onDismiss) { Text("Close", color = navy) }
+                }
+            }
+        }
     }
 }

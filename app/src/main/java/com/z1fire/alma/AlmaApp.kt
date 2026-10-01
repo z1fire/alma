@@ -2,7 +2,6 @@ package com.z1fire.alma
 
 import android.app.Application
 import androidx.glance.appwidget.updateAll
-import com.z1fire.alma.data.CourseStatus
 import com.z1fire.alma.data.Repository
 import com.z1fire.alma.data.course
 import com.z1fire.alma.reminders.Notifier
@@ -27,16 +26,10 @@ class AlmaApp : Application() {
         repository = Repository(File(filesDir, "curriculum.json"))
         ReminderScheduler.createChannels(this)
 
-        // Re-arm reminder alarms whenever notification settings or class schedules change.
+        // Re-arm the daily reminder when its settings change.
         appScope.launch {
             repository.state
-                .map { d ->
-                    Pair(
-                        d.profile.copy(studentName = "", institution = "", motto = ""),
-                        d.courses.filter { it.status == CourseStatus.ENROLLED }
-                            .map { listOf(it.id, it.startEpochDay, it.endEpochDay, it.meetings) },
-                    )
-                }
+                .map { Pair(it.profile.reminderEnabled, it.profile.reminderMinute) }
                 .distinctUntilChanged()
                 .collect { ReminderScheduler.reschedule(this@AlmaApp, repository.current) }
         }
@@ -49,10 +42,10 @@ class AlmaApp : Application() {
                 .collect { Notifier.syncSession(this@AlmaApp, repository.current) }
         }
 
-        // Keep the home-screen widget in step with courses, schedules and assignments.
+        // Keep the home-screen widget in step with courses and logged time.
         appScope.launch {
             repository.state
-                .map { Pair(it.courses, it.departments) }
+                .map { Pair(it.courses, it.profile.weeklyGoalMinutes) }
                 .distinctUntilChanged()
                 .collect { TodayWidget().updateAll(this@AlmaApp) }
         }
