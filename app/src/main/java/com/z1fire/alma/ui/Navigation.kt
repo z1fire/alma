@@ -27,6 +27,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.z1fire.alma.ui.screens.BulletinScreen
 import com.z1fire.alma.ui.screens.CampusScreen
 import com.z1fire.alma.ui.screens.CatalogScreen
 import com.z1fire.alma.ui.screens.CourseDetailScreen
@@ -105,10 +106,18 @@ fun AlmaNavHost(pendingCourseId: String?, onPendingConsumed: () -> Unit) {
                     onOpenCourse = nav::openCourse,
                     onOpenSettings = { nav.navigate("settings") },
                     onNewCourse = { nav.editCourse(null) },
+                    onBrowseBulletin = { nav.navigate("bulletin") },
                 )
             }
             composable("catalog") {
-                CatalogScreen(onOpenCourse = nav::openCourse, onNewCourse = { nav.editCourse(null) })
+                CatalogScreen(
+                    onOpenCourse = nav::openCourse,
+                    onNewCourse = { nav.editCourse(null) },
+                    onBrowseBulletin = { nav.navigate("bulletin") },
+                )
+            }
+            composable("bulletin") {
+                BulletinScreen(onBack = { nav.popBackStack() }, onOpenCourse = nav::openCourse)
             }
             composable("schedule") {
                 ScheduleScreen(onOpenCourse = nav::openCourse)

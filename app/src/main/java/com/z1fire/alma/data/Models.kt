@@ -26,7 +26,18 @@ data class Profile(
     val weeklyGoalMinutes: Int = 300,
     val remindersEnabled: Boolean = false,
     val reminderLeadMinutes: Int = 10,
-)
+    val briefingEnabled: Boolean = false,
+    val briefingMinute: Int = 8 * 60,
+    val nudgeEnabled: Boolean = false,
+    val nudgeMinute: Int = 20 * 60,
+    val weeklyReportEnabled: Boolean = false,
+    val sessionNotificationEnabled: Boolean = true,
+    /** The Campus "turn on reminders?" card was answered. */
+    val notificationsPrompted: Boolean = false,
+) {
+    val anyScheduledNotifications: Boolean
+        get() = remindersEnabled || briefingEnabled || nudgeEnabled || weeklyReportEnabled
+}
 
 @Serializable
 data class Department(
@@ -67,6 +78,8 @@ data class Course(
     val reflection: String = "",
     val completedEpochDay: Long? = null,
     val createdAtMillis: Long = System.currentTimeMillis(),
+    /** Suggested length; sets the end date on enrollment when none is chosen. */
+    val durationWeeks: Int? = null,
 ) {
     /** Share of syllabus units and assignments checked off. */
     val progress: Float
@@ -155,6 +168,8 @@ data class Assignment(
     val done: Boolean = false,
     val grade: String = "",
     val notes: String = "",
+    /** Days after the course start this is due; becomes [dueEpochDay] on enrollment. */
+    val dueOffsetDays: Int? = null,
 )
 
 @Serializable

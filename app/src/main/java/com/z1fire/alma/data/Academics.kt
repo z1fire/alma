@@ -124,6 +124,20 @@ fun AppData.meetingsOn(date: LocalDate): List<Pair<Course, Meeting>> =
         .flatMap { c -> c.meetings.filter { it.dayOfWeek == date.dayOfWeek.value }.map { c to it } }
         .sortedBy { it.second.startMinute }
 
+/** Enrolls a course starting [today] (unless it already has a start), filling in dates from its plan. */
+fun Course.enrolled(today: LocalDate): Course {
+    val start = startEpochDay ?: today.toEpochDay()
+    return copy(
+        status = CourseStatus.ENROLLED,
+        term = term.ifBlank { Terms.forDate(LocalDate.ofEpochDay(start)) },
+        startEpochDay = start,
+        endEpochDay = endEpochDay ?: durationWeeks?.let { start + it * 7L - 1 },
+        assignments = assignments.map { a ->
+            if (a.dueEpochDay == null && a.dueOffsetDays != null) a.copy(dueEpochDay = start + a.dueOffsetDays) else a
+        },
+    )
+}
+
 data class UpcomingMeeting(val date: LocalDate, val course: Course, val meeting: Meeting)
 
 /** The first class meeting starting after [now], looking up to [days] ahead. */

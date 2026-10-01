@@ -1,6 +1,10 @@
 package com.z1fire.alma.data
 
 import android.util.Log
+import com.z1fire.alma.data.bulletin.EnrollPlan
+import com.z1fire.alma.data.bulletin.TemplateCourse
+import com.z1fire.alma.data.bulletin.TemplateDept
+import com.z1fire.alma.data.bulletin.addFromBulletin
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -129,6 +133,22 @@ class Repository(private val file: File) {
     }
 
     fun loadSample(today: LocalDate = LocalDate.now()) = update { SampleData.addTo(it, today) }
+
+    /** Copies bulletin courses into the catalog; returns the ids of the courses actually added. */
+    fun addFromBulletin(
+        dept: TemplateDept,
+        picks: List<TemplateCourse>,
+        enroll: EnrollPlan? = null,
+        withPrograms: Boolean = false,
+    ): List<String> {
+        var added = emptyList<String>()
+        update { d ->
+            val (next, ids) = d.addFromBulletin(dept, picks, enroll, withPrograms)
+            added = ids
+            next
+        }
+        return added
+    }
 
     companion object {
         private const val TAG = "AlmaRepository"

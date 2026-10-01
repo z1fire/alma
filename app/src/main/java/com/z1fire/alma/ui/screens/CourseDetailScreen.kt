@@ -85,10 +85,10 @@ import com.z1fire.alma.data.Resource
 import com.z1fire.alma.data.ResourceStatus
 import com.z1fire.alma.data.ResourceType
 import com.z1fire.alma.data.StudySession
-import com.z1fire.alma.data.Terms
 import com.z1fire.alma.data.codeOf
 import com.z1fire.alma.data.course
 import com.z1fire.alma.data.department
+import com.z1fire.alma.data.enrolled
 import com.z1fire.alma.data.levelLabel
 import com.z1fire.alma.data.upsert
 import com.z1fire.alma.ui.ConfirmDialog
@@ -216,13 +216,7 @@ fun CourseDetailScreen(
                     data = data,
                     course = course,
                     onEnroll = {
-                        update {
-                            it.copy(
-                                status = CourseStatus.ENROLLED,
-                                term = it.term.ifBlank { Terms.forDate(today) },
-                                startEpochDay = it.startEpochDay ?: today.toEpochDay(),
-                            )
-                        }
+                        update { it.enrolled(today) }
                         scope.launch { snackbar.showSnackbar("Enrolled in ${data.codeOf(course)}. Classes begin!") }
                     },
                     onStart = { repo.startTimer(course.id) },

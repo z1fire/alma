@@ -2,6 +2,7 @@ package com.z1fire.alma.ui.screens
 
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,7 +15,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.LibraryBooks
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.LocalLibrary
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
@@ -23,6 +27,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -34,18 +39,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.z1fire.alma.data.CourseStatus
+import com.z1fire.alma.data.bulletin.Bulletin
 import com.z1fire.alma.data.codeOf
 import com.z1fire.alma.ui.ColorDot
 import com.z1fire.alma.ui.CourseCard
 import com.z1fire.alma.ui.EmptyState
-import com.z1fire.alma.ui.LocalRepository
 import com.z1fire.alma.ui.rememberAppData
 import com.z1fire.alma.ui.theme.deptColor
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CatalogScreen(onOpenCourse: (String) -> Unit, onNewCourse: () -> Unit) {
-    val repo = LocalRepository.current
+fun CatalogScreen(onOpenCourse: (String) -> Unit, onNewCourse: () -> Unit, onBrowseBulletin: () -> Unit) {
     val data = rememberAppData()
     var filter by rememberSaveable { mutableStateOf<CourseStatus?>(null) }
     var query by rememberSaveable { mutableStateOf("") }
@@ -59,7 +63,18 @@ fun CatalogScreen(onOpenCourse: (String) -> Unit, onNewCourse: () -> Unit) {
         .filter { it.second.isNotEmpty() }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Course Catalog") }) },
+        topBar = {
+            TopAppBar(
+                title = { Text("Course Catalog") },
+                actions = {
+                    TextButton(onClick = onBrowseBulletin) {
+                        Icon(Icons.Filled.LocalLibrary, null)
+                        Spacer(Modifier.width(6.dp))
+                        Text("Bulletin")
+                    }
+                },
+            )
+        },
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = onNewCourse,
@@ -72,10 +87,10 @@ fun CatalogScreen(onOpenCourse: (String) -> Unit, onNewCourse: () -> Unit) {
             EmptyState(
                 icon = Icons.AutoMirrored.Filled.LibraryBooks,
                 title = "The catalog is empty",
-                message = "Every university starts with a first course. Design one from scratch, or load a sample logic course to see how it works.",
+                message = "Every university starts with a first course. Browse ${Bulletin.courseCount} ready-made courses in the Course Bulletin, or design your own with the + button.",
                 modifier = Modifier.padding(padding),
-                actionLabel = "Load sample course",
-                onAction = { repo.loadSample() },
+                actionLabel = "Browse the Course Bulletin",
+                onAction = onBrowseBulletin,
             )
             return@Scaffold
         }
@@ -127,6 +142,25 @@ fun CatalogScreen(onOpenCourse: (String) -> Unit, onNewCourse: () -> Unit) {
                 }
                 items(courses.sortedWith(compareBy({ it.number.padStart(6, '0') }, { it.title })), key = { it.id }) { c ->
                     CourseCard(data, c, onClick = { onOpenCourse(c.id) })
+                }
+            }
+            item(key = "bulletin") {
+                Card(
+                    onClick = onBrowseBulletin,
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                ) {
+                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.LocalLibrary, null)
+                        Spacer(Modifier.width(12.dp))
+                        Column {
+                            Text("Browse the Course Bulletin", style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                "${Bulletin.courseCount} ready-made courses — languages, sciences, CS, engineering, space, art, music, fitness",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    }
                 }
             }
         }

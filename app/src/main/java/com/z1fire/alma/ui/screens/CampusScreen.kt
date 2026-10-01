@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Settings
@@ -78,6 +79,7 @@ import com.z1fire.alma.ui.formatTimeRange
 import com.z1fire.alma.ui.gpaText
 import com.z1fire.alma.ui.initials
 import com.z1fire.alma.ui.rememberAppData
+import com.z1fire.alma.ui.rememberNotificationGate
 import com.z1fire.alma.ui.relativeDue
 import com.z1fire.alma.ui.theme.deptColor
 import kotlinx.coroutines.delay
@@ -85,10 +87,18 @@ import java.time.LocalDate
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CampusScreen(onOpenCourse: (String) -> Unit, onOpenSettings: () -> Unit, onNewCourse: () -> Unit) {
+fun CampusScreen(
+    onOpenCourse: (String) -> Unit,
+    onOpenSettings: () -> Unit,
+    onNewCourse: () -> Unit,
+    onBrowseBulletin: () -> Unit,
+) {
     val data = rememberAppData()
     val today = LocalDate.now()
     val enrolled = data.courses.filter { it.status == CourseStatus.ENROLLED }
+    val repo = LocalRepository.current
+    val withNotifications = rememberNotificationGate(onDenied = { repo.updateProfile { it.copy(notificationsPrompted = true) } })
+    val offerReminders = !data.profile.notificationsPrompted && !data.profile.anyScheduledNotifications && enrolled.isNotEmpty()
 
     Scaffold(
         topBar = {
@@ -118,6 +128,26 @@ fun CampusScreen(onOpenCourse: (String) -> Unit, onOpenSettings: () -> Unit, onN
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             item { StudentIdCard(data, today) }
+            if (offerReminders) {
+                item {
+                    ReminderOfferCard(
+                        onAccept = {
+                            withNotifications {
+                                repo.updateProfile {
+                                    it.copy(
+                                        remindersEnabled = true,
+                                        briefingEnabled = true,
+                                        nudgeEnabled = true,
+                                        weeklyReportEnabled = true,
+                                        notificationsPrompted = true,
+                                    )
+                                }
+                            }
+                        },
+                        onDecline = { repo.updateProfile { it.copy(notificationsPrompted = true) } },
+                    )
+                }
+            }
             data.activeTimer?.let { timer ->
                 data.course(timer.courseId)?.let { c ->
                     item { TimerCard(data.codeOf(c), c.title, timer.startedAtMillis) }
@@ -128,10 +158,11 @@ fun CampusScreen(onOpenCourse: (String) -> Unit, onOpenSettings: () -> Unit, onN
                     EmptyState(
                         icon = Icons.Filled.School,
                         title = "Classes haven't started yet",
-                        message = "Design your first course — pick a subject, list your books, set a schedule — and enroll.",
-                        actionLabel = "Design a course",
-                        onAction = onNewCourse,
+                        message = "Pick a ready-made course from the Course Bulletin, or design your own — subject, books, schedule — and enroll.",
+                        actionLabel = "Browse the Course Bulletin",
+                        onAction = onBrowseBulletin,
                     )
+                    TextButton(onClick = onNewCourse, modifier = Modifier.fillMaxWidth()) { Text("Or design a course from scratch") }
                 }
                 return@LazyColumn
             }
@@ -374,6 +405,34 @@ private fun DueSoonCard(data: AppData, today: LocalDate, onOpenCourse: (String) 
                         Text("Open")
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReminderOfferCard(onAccept: () -> Unit, onDecline: () -> Unit) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+            contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+        ),
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.NotificationsActive, null)
+                Spacer(Modifier.width(8.dp))
+                Text("Want the bell to ring?", style = MaterialTheme.typography.titleMedium)
+            }
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "A morning briefing, a heads-up before class, an evening nudge on days you haven't studied, and a Sunday report. Fine-tune them anytime in the Registrar's Office.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onAccept) { Text("Turn on reminders") }
+                TextButton(onClick = onDecline) { Text("Not now") }
             }
         }
     }

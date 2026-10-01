@@ -4,6 +4,8 @@ import android.app.Application
 import androidx.glance.appwidget.updateAll
 import com.z1fire.alma.data.CourseStatus
 import com.z1fire.alma.data.Repository
+import com.z1fire.alma.data.course
+import com.z1fire.alma.reminders.Notifier
 import com.z1fire.alma.reminders.ReminderScheduler
 import com.z1fire.alma.widget.TodayWidget
 import kotlinx.coroutines.CoroutineScope
@@ -23,21 +25,28 @@ class AlmaApp : Application() {
     override fun onCreate() {
         super.onCreate()
         repository = Repository(File(filesDir, "curriculum.json"))
-        ReminderScheduler.createChannel(this)
+        ReminderScheduler.createChannels(this)
 
-        // Re-plan the next class reminder whenever anything that affects it changes.
+        // Re-arm reminder alarms whenever notification settings or class schedules change.
         appScope.launch {
             repository.state
                 .map { d ->
-                    Triple(
-                        d.profile.remindersEnabled,
-                        d.profile.reminderLeadMinutes,
+                    Pair(
+                        d.profile.copy(studentName = "", institution = "", motto = ""),
                         d.courses.filter { it.status == CourseStatus.ENROLLED }
                             .map { listOf(it.id, it.startEpochDay, it.endEpochDay, it.meetings) },
                     )
                 }
                 .distinctUntilChanged()
                 .collect { ReminderScheduler.reschedule(this@AlmaApp, repository.current) }
+        }
+
+        // Show or clear the ongoing timer notification as study sessions start and stop.
+        appScope.launch {
+            repository.state
+                .map { d -> Triple(d.activeTimer, d.profile.sessionNotificationEnabled, d.activeTimer?.let { d.course(it.courseId)?.title }) }
+                .distinctUntilChanged()
+                .collect { Notifier.syncSession(this@AlmaApp, repository.current) }
         }
 
         // Keep the home-screen widget in step with courses, schedules and assignments.

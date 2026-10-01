@@ -1,10 +1,8 @@
 package com.z1fire.alma.ui.screens
 
-import android.Manifest
 import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -54,19 +52,24 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.z1fire.alma.data.Department
+import com.z1fire.alma.data.Profile
+import com.z1fire.alma.reminders.Notifier
 import com.z1fire.alma.reminders.ReminderScheduler
 import com.z1fire.alma.ui.ColorDot
 import com.z1fire.alma.ui.ConfirmDialog
 import com.z1fire.alma.ui.LocalRepository
 import com.z1fire.alma.ui.SectionTitle
+import com.z1fire.alma.ui.TimeField
 import com.z1fire.alma.ui.formatMinutes
 import com.z1fire.alma.ui.rememberAppData
+import com.z1fire.alma.ui.rememberNotificationGate
 import com.z1fire.alma.ui.theme.deptColor
 import com.z1fire.alma.widget.TodayWidgetReceiver
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -82,10 +85,14 @@ fun SettingsScreen(onBack: () -> Unit) {
     var deletingDept by remember { mutableStateOf<Department?>(null) }
     var confirmImport by remember { mutableStateOf(false) }
 
-    val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        repo.updateProfile { it.copy(remindersEnabled = granted) }
-        if (!granted) scope.launch { snackbar.showSnackbar("Notifications are blocked — enable them in system settings.") }
+    val withNotifications = rememberNotificationGate(onDenied = {
+        scope.launch { snackbar.showSnackbar("Notifications are blocked — allow them for Alma in system settings.") }
+    })
+    /** Switch handler: turning on asks for permission first; turning off is immediate. */
+    fun toggle(on: Boolean, set: (Profile, Boolean) -> Profile) {
+        if (on) withNotifications { repo.updateProfile { set(it, true) } } else repo.updateProfile { set(it, false) }
     }
+
     val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri != null) scope.launch {
             val ok = withContext(Dispatchers.IO) {
@@ -133,9 +140,8 @@ fun SettingsScreen(onBack: () -> Unit) {
             Text(formatMinutes(profile.weeklyGoalMinutes) + " per week", style = MaterialTheme.typography.titleMedium)
             Slider(
                 value = profile.weeklyGoalMinutes / 60f,
-                onValueChange = { h -> repo.updateProfile { it.copy(weeklyGoalMinutes = (h * 60).toInt()) } },
+                onValueChange = { h -> repo.updateProfile { it.copy(weeklyGoalMinutes = (h * 2).roundToInt() * 30) } },
                 valueRange = 1f..40f,
-                steps = 38,
             )
             Text(
                 "A full-time college load is roughly 2–3 hours of study per credit per week.",
@@ -144,28 +150,14 @@ fun SettingsScreen(onBack: () -> Unit) {
             )
 
             Spacer(Modifier.height(4.dp))
-            SectionTitle("Class reminders")
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Notify me before class meetings", style = MaterialTheme.typography.bodyLarge)
-                    Text("For enrolled courses with scheduled meetings", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Switch(
-                    checked = profile.remindersEnabled,
-                    onCheckedChange = { on ->
-                        val needsPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-                        if (on && needsPermission) {
-                            notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-                        } else {
-                            repo.updateProfile { it.copy(remindersEnabled = on) }
-                        }
-                    },
-                )
-            }
+            SectionTitle("Notifications")
+            NotificationToggle(
+                "Class reminders",
+                "A heads-up before each scheduled class meeting",
+                profile.remindersEnabled,
+            ) { on -> toggle(on) { p, v -> p.copy(remindersEnabled = v) } }
             if (profile.remindersEnabled) {
-                Text("Heads-up time", style = MaterialTheme.typography.labelLarge)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(start = 12.dp)) {
                     listOf(0, 5, 10, 15, 30, 60).forEach { m ->
                         FilterChip(
                             selected = profile.reminderLeadMinutes == m,
@@ -183,13 +175,43 @@ fun SettingsScreen(onBack: () -> Unit) {
                 }
                 ReminderScheduler.findNext(data)?.let { next ->
                     Text(
-                        "Next reminder: ${next.course.title} — ${next.meeting.label}, " +
+                        "Next: ${next.course.title} — ${next.meeting.label}, " +
                             java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT)
                                 .format(java.util.Date(next.triggerMillis)),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 12.dp),
                     )
                 }
+            }
+            NotificationToggle(
+                "Morning briefing",
+                "Today's classes, what's due, and anything overdue",
+                profile.briefingEnabled,
+            ) { on -> toggle(on) { p, v -> p.copy(briefingEnabled = v) } }
+            if (profile.briefingEnabled) {
+                TimeField("Briefing time", profile.briefingMinute, { m -> repo.updateProfile { it.copy(briefingMinute = m) } }, Modifier.padding(start = 12.dp))
+            }
+            NotificationToggle(
+                "Study nudge",
+                "An evening reminder — only on days you haven't studied yet",
+                profile.nudgeEnabled,
+            ) { on -> toggle(on) { p, v -> p.copy(nudgeEnabled = v) } }
+            if (profile.nudgeEnabled) {
+                TimeField("Nudge time", profile.nudgeMinute, { m -> repo.updateProfile { it.copy(nudgeMinute = m) } }, Modifier.padding(start = 12.dp))
+            }
+            NotificationToggle(
+                "Weekly report",
+                "Sunday evening: hours vs. goal, streak, and the week ahead",
+                profile.weeklyReportEnabled,
+            ) { on -> toggle(on) { p, v -> p.copy(weeklyReportEnabled = v) } }
+            NotificationToggle(
+                "Session timer",
+                "Show the running timer with End & log while you study",
+                profile.sessionNotificationEnabled,
+            ) { on -> toggle(on) { p, v -> p.copy(sessionNotificationEnabled = v) } }
+            OutlinedButton(onClick = { withNotifications { Notifier.postTest(context, data) } }) {
+                Text("Send a test notification")
             }
 
             val widgets = context.getSystemService(AppWidgetManager::class.java)
@@ -220,7 +242,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                     Column(Modifier.weight(1f)) {
                         Text(d.name, style = MaterialTheme.typography.bodyLarge)
                         Text(
-                            "${d.code} · ${data.courses.count { it.departmentId == d.id }} courses",
+                            "${d.code} · " + data.courses.count { it.departmentId == d.id }.let { n -> "$n course${if (n == 1) "" else "s"}" },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -286,5 +308,16 @@ fun SettingsScreen(onBack: () -> Unit) {
             onConfirm = { importer.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
             onDismiss = { confirmImport = false },
         )
+    }
+}
+
+@Composable
+private fun NotificationToggle(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Switch(checked = checked, onCheckedChange = onChange)
     }
 }
