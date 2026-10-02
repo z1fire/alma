@@ -40,7 +40,7 @@ import com.z1fire.alma.AlmaApp
 import com.z1fire.alma.MainActivity
 import com.z1fire.alma.data.AppData
 import com.z1fire.alma.data.Course
-import com.z1fire.alma.ui.formatMinutes
+import com.z1fire.alma.ui.screens.timeSummary
 import com.z1fire.alma.ui.theme.deptColor
 
 // Same palette as the app, in day/night pairs.
@@ -89,12 +89,12 @@ private fun Content(context: Context, data: AppData) {
             .padding(horizontal = 14.dp, vertical = 12.dp)
             .clickable(openApp(context)),
     ) {
-        Text("STUDYING", style = TextStyle(color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold))
+        Text("CURRICULUM", style = TextStyle(color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold))
         Spacer(GlanceModifier.height(6.dp))
-        val courses = data.studying
+        val courses = data.curriculum
         if (courses.isEmpty()) {
-            Text("Nothing on your list", style = TextStyle(color = Ink, fontSize = 14.sp, fontWeight = FontWeight.Bold))
-            Text("Open Alma to add a course.", style = TextStyle(color = Muted, fontSize = 12.sp))
+            Text("Curriculum is empty", style = TextStyle(color = Ink, fontSize = 14.sp, fontWeight = FontWeight.Bold))
+            Text("Open Alma to start a course.", style = TextStyle(color = Muted, fontSize = 12.sp))
         } else {
             LazyColumn(GlanceModifier.fillMaxWidth().defaultWeight()) {
                 items(courses, itemId = { it.id.hashCode().toLong() }) { course -> CourseRow(context, course) }
@@ -114,10 +114,10 @@ private fun CourseRow(context: Context, course: Course) {
         Column(GlanceModifier.defaultWeight()) {
             Text(course.title, style = TextStyle(color = Ink, fontSize = 14.sp, fontWeight = FontWeight.Bold), maxLines = 1)
             val parts = listOfNotNull(
-                course.minutes.takeIf { it > 0 }?.let { "${formatMinutes(it)} studied" },
+                course.timeSummary(),
                 course.items.takeIf { it.isNotEmpty() }?.let { "${course.doneCount}/${it.size} done" },
             )
-            Text(parts.ifEmpty { listOf("Not started") }.joinToString(" · "), style = TextStyle(color = Muted, fontSize = 11.sp), maxLines = 1)
+            Text(parts.joinToString(" · "), style = TextStyle(color = Muted, fontSize = 11.sp), maxLines = 1)
         }
     }
 }

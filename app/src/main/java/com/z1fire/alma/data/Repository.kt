@@ -50,6 +50,7 @@ class Repository(private val file: File) {
     private fun decode(text: String): AppData = when (versionOf(text)) {
         1 -> json.decodeFromString(V1AppData.serializer(), text).toCurrent()
         2 -> json.decodeFromString(V2AppData.serializer(), text).toCurrent()
+        3 -> json.decodeFromString(AppData.serializer(), text).fromV3()
         else -> json.decodeFromString(AppData.serializer(), text)
     }
 
@@ -89,11 +90,27 @@ class Repository(private val file: File) {
         it.copy(minutes = it.minutes + minutes, lastStudiedEpochDay = LocalDate.now().toEpochDay())
     }
 
+    /** Sets the total directly (e.g. hours studied before using the app); doesn't count toward pace. */
+    fun setTotal(courseId: String, minutes: Int) = updateCourse(courseId) {
+        it.copy(minutes = minutes, baselineMinutes = it.baselineMinutes + (minutes - it.minutes))
+    }
+
+    /** Catalogue → curriculum. */
+    fun start(courseId: String) = updateCourse(courseId) {
+        it.copy(startedEpochDay = LocalDate.now().toEpochDay(), baselineMinutes = it.minutes, finishedEpochDay = null)
+    }
+
+    /** Curriculum → catalogue. */
+    fun shelve(courseId: String) = updateCourse(courseId) { it.copy(startedEpochDay = null) }
+
     fun finish(courseId: String, reflection: String) = updateCourse(courseId) {
         it.copy(finishedEpochDay = LocalDate.now().toEpochDay(), reflection = reflection)
     }
 
-    fun reopen(courseId: String) = updateCourse(courseId) { it.copy(finishedEpochDay = null) }
+    /** Finished → curriculum. */
+    fun reopen(courseId: String) = updateCourse(courseId) {
+        it.copy(finishedEpochDay = null, startedEpochDay = it.startedEpochDay ?: LocalDate.now().toEpochDay())
+    }
 
     fun exportJson(): String = json.encodeToString(AppData.serializer(), current)
 

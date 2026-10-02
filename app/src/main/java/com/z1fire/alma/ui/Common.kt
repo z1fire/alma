@@ -77,6 +77,16 @@ fun formatMinutes(m: Int): String = when {
     else -> "${m / 60}h ${m % 60}m"
 }
 
+/** Whole hours with thousands separators: "10,000h". */
+fun formatHours(hours: Int): String = String.format(Locale.US, "%,dh", hours)
+
+/** Minutes as hours for goal displays: "212h", "3.5h", "45m". */
+fun formatHoursShort(m: Int): String = when {
+    m < 60 -> "${m}m"
+    m % 60 == 0 || m >= 100 * 60 -> String.format(Locale.US, "%,dh", m / 60)
+    else -> String.format(Locale.US, "%.1fh", m / 60.0)
+}
+
 /** "3 hours", "1.5 hours", "45 minutes" — for certificates and summaries. */
 fun formatHoursLong(m: Int): String {
     if (m < 60) return "$m minute${if (m == 1) "" else "s"}"

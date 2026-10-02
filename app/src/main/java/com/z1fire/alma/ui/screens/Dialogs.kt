@@ -54,6 +54,7 @@ import com.z1fire.alma.ui.ColorDot
 import com.z1fire.alma.ui.TimeField
 import com.z1fire.alma.ui.FormDialog
 import com.z1fire.alma.ui.formatDate
+import com.z1fire.alma.ui.formatHours
 import com.z1fire.alma.ui.formatHoursLong
 import com.z1fire.alma.ui.theme.DeptColors
 import com.z1fire.alma.ui.theme.Gold
@@ -68,6 +69,7 @@ fun CourseDialog(initial: Course?, onDismiss: () -> Unit, onSave: (Course) -> Un
     var subject by remember { mutableStateOf(initial?.subject ?: "") }
     var notes by remember { mutableStateOf(initial?.notes ?: "") }
     var color by remember { mutableIntStateOf(initial?.colorIndex ?: DeptColors.indices.random()) }
+    var goal by remember { mutableStateOf(initial?.goalHours?.toString() ?: "") }
     var idea by remember { mutableStateOf<Idea?>(null) }
 
     FormDialog(
@@ -77,7 +79,15 @@ fun CourseDialog(initial: Course?, onDismiss: () -> Unit, onSave: (Course) -> Un
         saveLabel = if (isNew) "Create" else "Save",
         onSave = {
             val base = initial ?: idea?.toCourse() ?: Course(title = "")
-            onSave(base.copy(title = title.trim(), subject = subject.trim(), notes = notes.trim(), colorIndex = color))
+            onSave(
+                base.copy(
+                    title = title.trim(),
+                    subject = subject.trim(),
+                    notes = notes.trim(),
+                    colorIndex = color,
+                    goalHours = goal.toIntOrNull()?.takeIf { it > 0 },
+                ),
+            )
         },
     ) {
         if (isNew) {
@@ -131,6 +141,24 @@ fun CourseDialog(initial: Course?, onDismiss: () -> Unit, onSave: (Course) -> Un
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
             modifier = Modifier.fillMaxWidth(),
         )
+        OutlinedTextField(
+            goal,
+            { goal = it.filter(Char::isDigit).take(6) },
+            label = { Text("Hour goal (optional)") },
+            supportingText = { Text("For ongoing studies like a language, set a big goal and track hours toward it.") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf(20, 50, 100, 500, 1000, 10000).forEach { h ->
+                FilterChip(
+                    selected = goal == h.toString(),
+                    onClick = { goal = if (goal == h.toString()) "" else h.toString() },
+                    label = { Text(formatHours(h)) },
+                )
+            }
+        }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             DeptColors.forEachIndexed { i, c ->
                 Box(
@@ -297,6 +325,7 @@ fun CertificateDialog(name: String, course: Course, onDismiss: () -> Unit) {
                     Spacer(Modifier.height(12.dp))
                     val stats = listOfNotNull(
                         course.minutes.takeIf { it > 0 }?.let { formatHoursLong(it) + " of study" },
+                        course.goalHours?.takeIf { course.goalReached }?.let { "goal of ${formatHours(it)} reached" },
                         course.doneCount.takeIf { it > 0 }?.let { "$it item${if (it == 1) "" else "s"} completed" },
                     )
                     if (stats.isNotEmpty()) {

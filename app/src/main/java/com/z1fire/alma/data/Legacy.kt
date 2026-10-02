@@ -6,7 +6,9 @@ import kotlinx.serialization.Serializable
  * Readers for older save formats, so upgrading never loses work.
  *   v1: the full "college" model (departments, units, readings, assignments, dated sessions).
  *   v2: courses with a checklist, a status, and dated study sessions.
- * Both become v3: checklist items carry over, and dated sessions collapse into a total and a last-studied day.
+ *   v3: one list; every unfinished course counted as being studied.
+ * Checklist items carry over; dated sessions collapse into a total and a last-studied day; courses that
+ * were in progress land in the curriculum and planned ones in the catalogue.
  * Enum-typed fields are read as strings so old files decode no matter what changed since.
  */
 
@@ -15,6 +17,18 @@ internal data class OldSession(val epochDay: Long = 0, val minutes: Int = 0)
 
 private fun List<OldSession>.total() = sumOf { it.minutes }
 private fun List<OldSession>.lastDay() = filter { it.minutes > 0 }.maxOfOrNull { it.epochDay }
+private fun List<OldSession>.firstDay() = filter { it.minutes > 0 }.minOfOrNull { it.epochDay }
+private fun dayOf(millis: Long) = millis / 86_400_000L
+
+// ---------------- v3 ----------------
+
+/** v3 had no catalogue: every unfinished course was in progress, so it goes to the curriculum. */
+internal fun AppData.fromV3() = copy(
+    version = AppData.CURRENT_VERSION,
+    courses = courses.map { c ->
+        if (c.finished) c else c.copy(startedEpochDay = c.lastStudiedEpochDay ?: dayOf(c.createdAtMillis), baselineMinutes = c.minutes)
+    },
+)
 
 // ---------------- v2 ----------------
 
@@ -57,6 +71,8 @@ internal fun V2AppData.toCurrent() = AppData(
             colorIndex = c.colorIndex,
             items = c.items,
             minutes = c.sessions.total(),
+            baselineMinutes = c.sessions.total(),
+            startedEpochDay = if (c.status == "SOMEDAY") null else c.sessions.firstDay() ?: dayOf(c.createdAtMillis),
             lastStudiedEpochDay = c.sessions.lastDay(),
             finishedEpochDay = if (c.status == "FINISHED") c.finishedEpochDay ?: c.sessions.lastDay() ?: 0 else null,
             reflection = c.reflection,
@@ -92,6 +108,7 @@ internal data class V1Course(
     val description: String = "",
     val objectives: List<String> = emptyList(),
     val status: String = "PLANNED",
+    val startEpochDay: Long? = null,
     val modules: List<V1Named> = emptyList(),
     val resources: List<V1Resource> = emptyList(),
     val assignments: List<V1Named> = emptyList(),
@@ -135,6 +152,10 @@ internal fun V1AppData.toCurrent(): AppData {
                     } +
                     c.assignments.map { StudyItem(text = it.title, done = it.done) },
                 minutes = c.sessions.total(),
+                baselineMinutes = c.sessions.total(),
+                startedEpochDay = if (c.status == "ENROLLED" || c.status == "COMPLETED") {
+                    c.startEpochDay ?: c.sessions.firstDay() ?: dayOf(c.createdAtMillis)
+                } else null,
                 lastStudiedEpochDay = c.sessions.lastDay(),
                 finishedEpochDay = if (c.status == "COMPLETED") c.completedEpochDay ?: 0 else null,
                 reflection = c.reflection,

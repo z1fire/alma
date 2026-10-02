@@ -22,7 +22,7 @@ object Notifier {
 
     /** Today's nudge, or null if something was already studied today (or there's nothing to study). */
     fun reminderText(data: AppData, today: LocalDate): String? {
-        val studying = data.studying
+        val studying = data.curriculum
         if (studying.isEmpty() || studying.any { it.lastStudiedEpochDay == today.toEpochDay() }) return null
         // Suggest the course that's gone longest without attention.
         val pick = studying.minBy { it.lastStudiedEpochDay ?: Long.MIN_VALUE }

@@ -1,19 +1,22 @@
 # Alma — a simple study tracker
 
-A small Android app for self-directed learning. Each course is something you're learning — Mandarin, guitar,
-cell biology — with a checklist of what to study and a running total of the time you've put in. When you're done,
-mark it finished.
+A small Android app for self-directed learning. Plan courses in a catalogue, study them from your curriculum, and keep a
+record of what you've finished — each with a checklist of what to study, a running total of time, and an optional
+hour goal for long-haul subjects.
 
 **Download:** grab `Alma.apk` from the [latest release](../../releases/latest) and install it on your phone
 (allow "install unknown apps" for your browser or file manager).
 
 ## How it works
 
-- **One list.** What you're studying at the top; finished courses collect under **Done**.
-- **A course** has a name, an optional subject, notes and color, and a **What to study** checklist
-  (books, chapters, topics — with optional links). Start from a starter idea or type your own.
-- **Time:** tap **+15m / +30m / +1h** after a study session (with Undo). Tap the total to correct it.
-- **Finish** a course to note what you learned and get a certificate of completion.
+- **Curriculum** — what you're studying now.
+- **Catalogue** — courses you've planned but not started, grouped by subject. Tap **Start** when you're ready.
+- **Finished** — completed courses with dates, hours and a certificate.
+- **A course** has a name, optional subject, notes and color, a **What to study** checklist (with optional links),
+  and an optional **hour goal** — use a big one (say 10,000h) for ongoing studies like a language.
+- **Time:** tap **+15m / +30m / +1h** after studying (with Undo). Tap the total to enter hours you'd already
+  studied. Courses with a goal show your daily average and a projected date for reaching it; crossing the goal
+  offers to mark the course finished.
 - From the **⋮** menu: an optional daily reminder (only on days you haven't studied), your name for certificates,
   a home-screen widget, and backup / restore.
 

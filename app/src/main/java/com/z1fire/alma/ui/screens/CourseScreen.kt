@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -32,7 +31,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -52,7 +50,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontStyle
@@ -61,6 +58,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import com.z1fire.alma.data.Course
 import com.z1fire.alma.data.StudyItem
 import com.z1fire.alma.ui.ConfirmDialog
 import com.z1fire.alma.ui.EmptyState
@@ -68,10 +66,15 @@ import com.z1fire.alma.ui.LocalRepository
 import com.z1fire.alma.ui.SectionTitle
 import com.z1fire.alma.ui.Stat
 import com.z1fire.alma.ui.formatDate
+import com.z1fire.alma.ui.formatHours
+import com.z1fire.alma.ui.formatHoursShort
 import com.z1fire.alma.ui.formatMinutes
 import com.z1fire.alma.ui.rememberAppData
 import com.z1fire.alma.ui.theme.deptColor
 import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -90,6 +93,7 @@ fun CourseScreen(courseId: String, onBack: () -> Unit) {
         return
     }
     val accent = deptColor(course.colorIndex)
+    val today = LocalDate.now()
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
@@ -112,11 +116,17 @@ fun CourseScreen(courseId: String, onBack: () -> Unit) {
     fun addTime(minutes: Int) {
         val before = course
         repo.addMinutes(course.id, minutes)
+        val crossedGoal = before.goalMinutes?.let { before.minutes < it && before.minutes + minutes >= it } ?: false
         scope.launch {
             snackbar.currentSnackbarData?.dismiss()
-            val result = snackbar.showSnackbar("Added ${formatMinutes(minutes)}", actionLabel = "Undo", duration = SnackbarDuration.Long)
-            if (result == SnackbarResult.ActionPerformed) {
-                repo.updateCourse(before.id) { it.copy(minutes = it.minutes - minutes, lastStudiedEpochDay = before.lastStudiedEpochDay) }
+            if (crossedGoal) {
+                val r = snackbar.showSnackbar("Goal reached: ${formatHours(before.goalHours!!)}!", actionLabel = "Finish", duration = SnackbarDuration.Long)
+                if (r == SnackbarResult.ActionPerformed) finishing = true
+            } else {
+                val r = snackbar.showSnackbar("Added ${formatMinutes(minutes)}", actionLabel = "Undo", duration = SnackbarDuration.Long)
+                if (r == SnackbarResult.ActionPerformed) {
+                    repo.updateCourse(before.id) { it.copy(minutes = it.minutes - minutes, lastStudiedEpochDay = before.lastStudiedEpochDay) }
+                }
             }
         }
     }
@@ -133,7 +143,10 @@ fun CourseScreen(courseId: String, onBack: () -> Unit) {
                         IconButton(onClick = { menuOpen = true }) { Icon(Icons.Filled.MoreVert, "More") }
                         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                             if (course.finished) {
-                                DropdownMenuItem(text = { Text("Move back to studying") }, onClick = { menuOpen = false; repo.reopen(course.id) })
+                                DropdownMenuItem(text = { Text("Back to curriculum") }, onClick = { menuOpen = false; repo.reopen(course.id) })
+                            }
+                            if (course.inCurriculum) {
+                                DropdownMenuItem(text = { Text("Move to catalogue") }, onClick = { menuOpen = false; repo.shelve(course.id) })
                             }
                             DropdownMenuItem(
                                 text = { Text("Delete course", color = MaterialTheme.colorScheme.error) },
@@ -150,8 +163,14 @@ fun CourseScreen(courseId: String, onBack: () -> Unit) {
             item {
                 Column(Modifier.fillMaxWidth().background(accent.copy(alpha = 0.10f)).padding(16.dp)) {
                     Text(
-                        listOfNotNull(course.subject.ifBlank { null }, if (course.finished) "Finished" else null)
-                            .joinToString(" · ").uppercase(),
+                        listOfNotNull(
+                            course.subject.ifBlank { null },
+                            when {
+                                course.finished -> "Finished"
+                                course.inCatalogue -> "In catalogue"
+                                else -> null
+                            },
+                        ).joinToString(" · ").uppercase(),
                         style = MaterialTheme.typography.labelMedium,
                         color = accent,
                         fontWeight = FontWeight.Bold,
@@ -159,54 +178,58 @@ fun CourseScreen(courseId: String, onBack: () -> Unit) {
                     Text(course.title, style = MaterialTheme.typography.headlineMedium)
                     Spacer(Modifier.height(12.dp))
                     Row(Modifier.fillMaxWidth()) {
-                        Stat(formatMinutes(course.minutes), "STUDIED  ✎", Modifier.weight(1f).clickable { editingTime = true })
-                        Stat(
-                            if (course.items.isEmpty()) "—" else "${course.doneCount}/${course.items.size}",
-                            "DONE",
-                            Modifier.weight(1f),
-                        )
+                        Stat(formatHoursShort(course.minutes), "STUDIED  ✎", Modifier.weight(1f).clickable { editingTime = true })
+                        course.goalHours?.let { Stat(formatHours(it), "GOAL", Modifier.weight(1f)) }
+                        if (course.items.isNotEmpty()) Stat("${course.doneCount}/${course.items.size}", "DONE", Modifier.weight(1f))
+                    }
+                    if (course.goalMinutes != null) {
+                        ProgressLine(course.hourProgress, accent, "${(course.hourProgress * 100).toInt()}% of hours")
                     }
                     if (course.items.isNotEmpty()) {
-                        Spacer(Modifier.height(10.dp))
-                        LinearProgressIndicator(
-                            progress = { course.progress },
-                            modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
-                            color = accent,
-                            trackColor = accent.copy(alpha = 0.2f),
-                            drawStopIndicator = {},
-                        )
+                        ProgressLine(course.itemProgress, accent, "${(course.itemProgress * 100).toInt()}% of list")
+                    }
+                    paceText(course, today)?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 10.dp))
                     }
                 }
             }
 
-            // ---- add time / finish ----
+            // ---- actions ----
             item {
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("Add time", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
-                        listOf(15, 30, 60).forEach { m ->
-                            FilledTonalButton(onClick = { addTime(m) }) { Text("+${formatMinutes(m)}") }
+                    when {
+                        course.inCatalogue -> {
+                            Button(onClick = { repo.start(course.id) }, modifier = Modifier.fillMaxWidth()) {
+                                Text("Start — add to my curriculum")
+                            }
                         }
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    if (course.finished) {
-                        Button(onClick = { certificate = true }, modifier = Modifier.fillMaxWidth()) {
-                            Icon(Icons.Filled.WorkspacePremium, null)
-                            Text("  View certificate")
+                        course.finished -> {
+                            Button(onClick = { certificate = true }, modifier = Modifier.fillMaxWidth()) {
+                                Icon(Icons.Filled.WorkspacePremium, null)
+                                Text("  View certificate")
+                            }
+                            course.finishedEpochDay?.takeIf { it > 0 }?.let {
+                                Text(
+                                    "Finished ${formatDate(it)}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(top = 8.dp),
+                                )
+                            }
+                            if (course.reflection.isNotBlank()) {
+                                Text("“${course.reflection}”", style = MaterialTheme.typography.bodyLarge, fontStyle = FontStyle.Italic, modifier = Modifier.padding(top = 4.dp))
+                            }
                         }
-                        course.finishedEpochDay?.takeIf { it > 0 }?.let {
-                            Text(
-                                "Finished ${formatDate(it)}",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 8.dp),
-                            )
+                        else -> {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text("Add time", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+                                listOf(15, 30, 60).forEach { m ->
+                                    FilledTonalButton(onClick = { addTime(m) }) { Text("+${formatMinutes(m)}") }
+                                }
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            OutlinedButton(onClick = { finishing = true }, modifier = Modifier.fillMaxWidth()) { Text("Mark finished") }
                         }
-                        if (course.reflection.isNotBlank()) {
-                            Text("“${course.reflection}”", style = MaterialTheme.typography.bodyLarge, fontStyle = FontStyle.Italic, modifier = Modifier.padding(top = 4.dp))
-                        }
-                    } else {
-                        OutlinedButton(onClick = { finishing = true }, modifier = Modifier.fillMaxWidth()) { Text("Mark finished") }
                     }
                 }
             }
@@ -260,7 +283,7 @@ fun CourseScreen(courseId: String, onBack: () -> Unit) {
     }
     if (editingTime) {
         TotalTimeDialog(course.minutes, onDismiss = { editingTime = false }, onSave = { m ->
-            repo.updateCourse(course.id) { it.copy(minutes = m) }
+            repo.setTotal(course.id, m)
             editingTime = false
         })
     }
@@ -318,4 +341,18 @@ private fun ChecklistRow(item: StudyItem, accent: Color, onToggle: () -> Unit, o
             }
         }
     }
+}
+
+/** "Averaging 1h 20m a day since Mar 3 · at this pace, 10,000h around Jun 2046." */
+private fun paceText(course: Course, today: LocalDate): String? {
+    if (!course.inCurriculum) return null
+    val start = course.startedEpochDay ?: return null
+    val avg = course.averagePerDay(today) ?: return null
+    if (avg <= 0) return null
+    val since = "Averaging ${formatMinutes(avg.roundToInt().coerceAtLeast(1))} a day since ${formatDate(start)}"
+    val goal = course.goalHours ?: return since
+    if (course.goalReached) return since
+    val eta = course.projectedGoalDate(today)
+        ?: return "$since · a projection for ${formatHours(goal)} appears after a week."
+    return "$since · at this pace, ${formatHours(goal)} around ${eta.format(DateTimeFormatter.ofPattern("MMM yyyy"))}."
 }
